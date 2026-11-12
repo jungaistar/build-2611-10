@@ -1,112 +1,109 @@
-/* 브라우저에 실제로 띄워 화면이 그려지는지 본다 — node test/smoke.browser.js
- * 규칙 테스트가 다 통과해도 app.js 오타 하나면 빈 화면이 된다. playwright 가 없으면 건너뛴다. */
+/* 브라우저에 실제로 띄워 본다 — node test/smoke.browser.js (playwright 가 없으면 건너뜀). 오늘은 ?today=2026-11-12 로 고정 */
 'use strict';
-var http = require('http'), fs = require('fs'), path = require('path');
+var http = require('http'), fs = require('fs'), path = require('path'), os = require('os');
 var chromium;
 try { chromium = require('playwright').chromium; }
-catch (e) { console.log('playwright 가 없어 화면 연기 테스트를 건너뜁니다.'); process.exit(0); }
+catch (e) { try { chromium = require('playwright-core').chromium; } catch (e2) { console.log('playwright 가 없어 화면 연기 테스트를 건너뜁니다.'); process.exit(0); } }
+var XLSX = require('../lib/xlsx.full.min.js');
 var ROOT = path.join(__dirname, '..');
-var MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
-var srv = http.createServer(function (q, s) {
-  var p = path.join(ROOT, decodeURIComponent(q.url.split('?')[0]).replace(/\/$/, '/index.html'));
-  fs.readFile(p, function (e, b) { if (e) { s.writeHead(404); return s.end(); } s.writeHead(200, { 'Content-Type': MIME[path.extname(p)] || 'application/octet-stream' }); s.end(b); });
-});
+var MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
+var srv = http.createServer(function (q, s) { var p = path.join(ROOT, decodeURIComponent(q.url.split('?')[0]).replace(/\/$/, '/index.html')); fs.readFile(p, function (e, b) { if (e) { s.writeHead(404); return s.end(); } s.writeHead(200, { 'Content-Type': MIME[path.extname(p)] || 'application/octet-stream' }); s.end(b); }); });
 var passed = 0, failed = 0;
-function ok(c, label, d) { if (c) passed++; else { failed++; console.log('  X ' + label + (d ? '  ' + d : '')); } }
+function ok(c, label, d) { if (process.env.SMOKE_V) console.log((c ? '  o ' : '  x ') + label); if (c) passed++; else { failed++; console.log('  X ' + label + (d != null ? '  ' + d : '')); } }
+var count = function (pg, sel) { return pg.$$eval(sel, function (t) { return t.length; }); };
+function xlsx(file, sheets) { var wb = XLSX.utils.book_new(); Object.keys(sheets).forEach(function (n) { XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheets[n]), n); }); fs.writeFileSync(file, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })); return file; }
 srv.listen(0, async function () {
-  var base = 'http://127.0.0.1:' + srv.address().port + '/';
-  var br = await chromium.launch();
-  var pg = await br.newPage({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
-  var errs = []; pg.on('pageerror', function (e) { errs.push(e.message); });
+  var base = 'http://127.0.0.1:' + srv.address().port + '/', url = base + '?today=2026-11-12';
+  var br = await chromium.launch(); var ctx = await br.newContext({ viewport: { width: 1360, height: 860 }, acceptDownloads: true });
+  var pg = await ctx.newPage(), errs = []; pg.on('pageerror', function (e) { errs.push(e.message); });
+  var tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'b10-smoke-'));
+  async function nav(p) { await pg.click('#nav button[data-p=' + p + ']'); await pg.waitForFunction(function (x) { return document.body.dataset.page === x; }, p); }
   try {
-    await pg.goto(base);
-    ok(await pg.isHidden('#s-result') && await pg.isHidden('#s-report'), '처음에는 분석·보고서 영역이 닫혀 있다');
-    await pg.click('#btn-sample');
-    await pg.waitForSelector('#rows tbody tr', { timeout: 5000 });
-    ok(await pg.isVisible('#s-result') && await pg.isVisible('#s-out') && await pg.isVisible('#s-report'), '보고서·분석·저장 영역이 열린다');
-    ok(await pg.$$eval('#rows tbody tr', function (t) { return t.length; }) === 11, '업무별 표 11줄');
-    ok(await pg.$$eval('#rows tr[data-cat="delayed"]', function (t) { return t.length; }) === 3, '지연 3줄');
-    ok(/통합 2/.test(await pg.textContent('#rows')), '통합 표시가 보인다');
-    ok(/11-06 → 2026-11-13|2026-11-06 → 2026-11-13/.test(await pg.textContent('#changes')), '일정 변경이 그려진다');
-    ok((await pg.$$eval('#issues li', function (t) { return t.length; })) === 4, '주요 이슈 4건');
-    ok(/10월 기념품 불출 대장 정리/.test(await pg.textContent('#missing')), '빠진 업무가 보인다');
-    ok(/금주 업무 11건/.test(await pg.textContent('#draft')), '보고서 초안 요약');
+    await pg.goto(url); await pg.waitForSelector('#k-total');
+    ok(await count(pg, '#nav button') === 4, '메뉴는 4개');
+    ok([await pg.textContent('#k-total'), await pg.textContent('#k-run'), await pg.textContent('#k-done'), await pg.textContent('#k-late')].join() === '9,5,3,1', '대시보드 현황 카드 4개(샘플 집계)');
+    ok(await count(pg, '#d-key .mi') === 6 && await count(pg, '#d-next .mi') === 5 && await count(pg, '#d-owner .mi') === 4, '주요 업무 현황 — 금주 중요 6 · 차주 예정 · 담당자별');
+    ok(await count(pg, '#d-dec tr') === 4 && /샘플/.test(await pg.textContent('#d-dec')), '의사결정 필요 항목 3건(샘플 표시)');
+    await pg.click('#d-dec [data-act=review] >> nth=0');
+    ok(await count(pg, '#d-dec tr') === 3, '검토 완료하면 기본으로 숨긴다');
+    await pg.check('[data-ch=show-reviewed]');
+    ok(await count(pg, '#d-dec tr') === 4 && /검토 취소/.test(await pg.textContent('#d-dec')), '「검토 완료 항목 보기」로 다시 조회');
 
-    // v1.1 팀장 보고서 — 전체 요약 상단 · 분야 4개 고정 순서 · 금주/차주 분리 · 확인 필요 · 접기 · 분야 고치기
-    var repTop = await pg.evaluate(function () { return document.querySelector('#s-report').getBoundingClientRect().top + window.scrollY < document.querySelector('#s-result').getBoundingClientRect().top + window.scrollY; });
-    ok(repTop, '팀장 보고서가 상세 분석보다 위에 있다');
-    var sumFirst = await pg.evaluate(function () { return document.querySelector('#rep-summary').getBoundingClientRect().top < document.querySelector('#rep-fields').getBoundingClientRect().top; });
-    ok(sumFirst && /금주 업무/.test(await pg.textContent('#rep-summary')), 'Ⅰ 전체 업무 요약이 분야별 보고 위에 있다');
-    var names = await pg.$$eval('#rep-fields details.field summary .fname', function (t) { return t.map(function (x) { return x.textContent; }); });
-    ok(JSON.stringify(names) === JSON.stringify(['복리후생 / 총무', '사회공헌 / 의전', '자산', '비상계획', '분류 확인 필요']), '분야 4개가 고정 순서로 + 분류 확인 필요', names.join('|'));
-    var wk = await pg.$$eval('#field-welfare h4.wk', function (t) { return t.map(function (x) { return x.className; }); });
-    ok(JSON.stringify(wk) === JSON.stringify(['wk wk-this', 'wk wk-next']), '분야마다 금주 추진실적 · 차주 추진계획이 나뉘어 있다', wk.join('|'));
-    ok(await pg.$$eval('#field-asset table.ft-this tbody tr', function (t) { return t.length; }) === 2 && await pg.$$eval('#field-asset table.ft-next tbody tr', function (t) { return t.length; }) === 2, '자산: 금주 2 · 차주 2');
-    ok(await pg.$$eval('#field-unsure table.ft-this tbody tr', function (t) { return t.length; }) === 2, '분류 확인 필요 2건');
-    ok(await pg.$$eval('#rep-fields tr.overdue td.due', function (t) { return t.length && getComputedStyle(t[0]).fontWeight >= 700; }), '기한 경과 줄이 강조된다');
-    ok(/기한 경과/.test(await pg.textContent('#rep-decisions')) && /결정 필요/.test(await pg.textContent('#rep-decisions')), '팀장 확인·의사결정 영역이 따로 있다');
-    ok(await pg.$$eval('#rep-mgmt .box', function (t) { return t.length; }) === 6, 'Ⅲ 종합 관리사항 6항목');
-    var fsum = await pg.textContent('table.fcount tr.total');
-    ok(/합계\s*11\s*2\s*2\s*4\s*3\s*8/.test(fsum.replace(/\s+/g, ' ')), '분야별 건수 합계 = 11·2·2·4·3·8', fsum);
-    await pg.click('#field-social summary');
-    ok(await pg.$eval('#field-social', function (d) { return !d.open; }) && await pg.isHidden('#field-social table'), '분야를 접으면 표가 숨는다');
-    await pg.click('#rep-open');
-    ok(await pg.$$eval('#rep-fields details.field', function (t) { return t.every(function (d) { return d.open; }); }), '「모두 펼치기」');
-    await pg.click('#rep-close');
-    ok(await pg.$$eval('#rep-fields details.field', function (t) { return t.every(function (d) { return !d.open; }); }), '「모두 접기」');
-    await pg.click('#rep-open');
-    // 분야 고치기 → 자산으로 옮겨지고 건수가 바뀌며 구분은 그대로
-    var catBefore = await pg.$$eval('#rows tbody tr', function (t) { return t.map(function (r) { return r.dataset.cat; }).join(','); });
-    await pg.selectOption('#field-unsure .fsel >> nth=0', 'asset');
-    await pg.waitForFunction(function () { return document.querySelectorAll('#field-asset table.ft-this tbody tr').length === 3; }, null, { timeout: 5000 });
-    ok(await pg.$$eval('#field-unsure table.ft-this tbody tr', function (t) { return t.length; }) === 1, '분야를 고치면 확인 필요에서 빠진다');
-    ok(/저장했습니다/.test(await pg.textContent('#fields-status')), '고친 분야를 저장했다고 알린다');
-    ok(await pg.$$eval('#rows tbody tr', function (t) { return t.map(function (r) { return r.dataset.cat; }).join(','); }) === catBefore, '분야를 고쳐도 구분은 그대로');
-    ok(await pg.$$eval('#rep-fields details.field', function (t) { return t.every(function (d) { return d.open; }); }), '다시 그려도 펼친 상태가 유지된다');
-    await pg.click('#filter .chip[data-f="done"]');
-    ok(await pg.$$eval('#rows tbody tr', function (t) { return t.length; }) === 2, '완료만 거르기');
-    var dl = await Promise.all([pg.waitForEvent('download'), pg.click('#btn-export')]);
-    ok(/\.xlsx$/.test(dl[0].suggestedFilename()), '엑셀 내보내기', dl[0].suggestedFilename());
-    var dh = await Promise.all([pg.waitForEvent('download'), pg.click('#btn-html')]);
-    ok(/\.html$/.test(dh[0].suggestedFilename()), '인쇄용 HTML 저장');
-    var htmlText = fs.readFileSync(await dh[0].path(), 'utf8');
-    ok(/Ⅱ\. 분야별 주간업무보고/.test(htmlText) && /1\. 복리후생 \/ 총무/.test(htmlText) && /4\. 비상계획/.test(htmlText) && /size:A4/.test(htmlText), '인쇄용 HTML 에 분야 구분과 A4 설정');
-    await pg.click('#btn-save');
-    ok(/저장했습니다/.test(await pg.textContent('#save-status')) && /고친 분야 1건/.test(await pg.textContent('#save-status')), '다음 주용으로 저장(고친 분야 포함)');
-    await pg.reload();
-    ok(await pg.isVisible('#load-saved'), '다시 열면 「저장해 둔 지난주」 버튼이 보인다');
-    // 고친 분야가 브라우저에 남아 다시 예제를 돌려도 그대로
-    await pg.click('#btn-sample');
-    await pg.waitForSelector('#rows tbody tr', { timeout: 5000 });
-    ok(await pg.$$eval('#field-asset table.ft-this tbody tr', function (t) { return t.length; }) === 3 && /화면에서 고침/.test(await pg.textContent('#rows')), '다시 열어도 고친 분야를 먼저 쓴다');
-    await pg.click('#btn-reset');
-    // 붙여넣기만으로도 돈다 — 업무가 한 분야뿐이면 나머지 분야는 「해당 기간 업무 없음」
-    await pg.fill('#text-cur', '구분\t팀원\t업무명\t추진현황\t일정/기한\t상태\t이슈\n금주\t김민준\t울산 공장견학 일정 조율\t확정\t2026-11-13\t완료\t');
-    await pg.click('#add-cur');
-    await pg.click('#load-saved');
-    await pg.fill('#ref', '2026-11-13');
-    await pg.click('#btn-build');
-    await pg.waitForSelector('#rows tbody tr', { timeout: 5000 });
-    ok(/완료/.test(await pg.textContent('#rows')) && /사무실 이전 견적 비교/.test(await pg.textContent('#missing')), '붙여넣기 + 저장된 지난주로 다음 주 보고서');
-    ok((await pg.$$eval('#rep-fields .none', function (t) { return t.length; })) === 7 && await pg.$$eval('#rep-fields details.field', function (t) { return t.length; }) === 4, '업무 없는 분야도 남기고 「해당 기간 업무 없음」(3분야 × 2 + 사회공헌 차주)');
-    ok(/지난주 분야/.test(await pg.textContent('#rows')), '지난주 보고서에 적힌 분야를 이어받는다');
-    // 좁은 화면 가로 넘침
-    await pg.setViewportSize({ width: 360, height: 800 });
-    var over = await pg.evaluate(function () {
-      var W = document.documentElement.clientWidth, bad = [];
-      document.querySelectorAll('body *').forEach(function (el) {
-        var r = el.getBoundingClientRect(); if (!r.width) return;
-        for (var p = el.parentElement; p; p = p.parentElement) { var ox = getComputedStyle(p).overflowX; if (ox === 'auto' || ox === 'scroll' || ox === 'hidden') return; }
-        if (r.right > W + 1) bad.push(el.tagName + '.' + el.className);
-      });
-      return bad.slice(0, 5);
-    });
-    ok(!over.length, '360px 가로 넘침 없음', over.join(', '));
-    await pg.goto(base + 'guide.html');
-    ok(/지난주/.test(await pg.textContent('main')), '사용법 페이지');
-  } catch (e) { failed++; console.log('  X 예외: ' + e.message); }
-  ok(!errs.length, '페이지 오류 없음', errs.join(' | '));
+    // 주간업무 현황
+    await nav('status');
+    ok(await count(pg, '#col-cur .item') === 9 && await count(pg, '#col-nxt .item') === 5, '금주 · 차주 좌우 두 열');
+    var box = await pg.evaluate(function () { var a = document.querySelector('#col-cur').getBoundingClientRect(), b = document.querySelector('#col-nxt').getBoundingClientRect(); var l = document.querySelector('#col-cur .list'); return [Math.round(a.width - b.width), a.top === b.top, b.left > a.right, getComputedStyle(l).overflowY]; });
+    ok(Math.abs(box[0]) <= 1 && box[1] && box[2] && box[3] === 'auto', '두 열은 같은 너비 · 나란히 · 따로 스크롤', JSON.stringify(box));
+    ok(await pg.isHidden('#col-cur .item >> nth=0 >> .dt'), '세부내용은 접힌 채 시작');
+    await pg.click('#col-cur .item >> nth=0 >> .row');
+    ok(await pg.isVisible('#col-cur .item.open .dt') && await count(pg, '.item.open') === 1, '눌러서 그 업무만 펼친다');
+    await pg.selectOption('[data-ch=f-owner]', '김민수');
+    ok(await count(pg, '#col-cur .item') === 3 && await count(pg, '#col-nxt .item') === 1, '담당자 필터');
+    await pg.selectOption('[data-ch=f-owner]', ''); await pg.selectOption('[data-ch=f-state]', '지연');
+    ok(await count(pg, '#col-cur .item') === 1 && await count(pg, '#col-cur .item.late') === 1, '상태 필터(지연)');
+    await pg.selectOption('[data-ch=f-state]', ''); await pg.selectOption('[data-ch=f-field]', '미분류');
+    ok(await count(pg, '#col-nxt .item') === 1 && /분야 미분류/.test(await pg.textContent('#col-nxt')), '분야 필터(미분류)');
+    await pg.selectOption('[data-ch=f-field]', '');
+    // 등록 · 수정 · 삭제
+    await pg.click('[data-act=new]'); await pg.fill('#taskform [data-f=title]', '시험 업무'); await pg.fill('#taskform [data-f=owner]', '홍길동'); await pg.fill('#taskform [data-f=due_date]', '2026-11-10'); await pg.fill('#taskform [data-f=detail]', '첫 줄\n둘째 줄');
+    await pg.click('[data-act=form-save]');
+    ok(await count(pg, '#col-cur .item') === 10 && await count(pg, '#col-cur .item.late') === 2 && /시험 업무/.test(await pg.textContent('#col-cur')), '업무 등록 — 마감일이 지나 지연으로 표시');
+    var id = await pg.evaluate(function () { return window.__app.db().tasks.filter(function (t) { return t.title === '시험 업무'; })[0].id; });
+    await pg.click('.item[data-id="' + id + '"] .row');
+    ok((await pg.textContent('.item[data-id="' + id + '"] pre.orig')) === '첫 줄\n둘째 줄', '세부내용 줄바꿈 그대로');
+    await pg.selectOption('.item[data-id="' + id + '"] [data-ch=set-status]', '완료');
+    ok(/완료/.test(await pg.textContent('.item[data-id="' + id + '"] .bd')), '상태를 완료로 바꾸면 지연이 풀린다');
+    await pg.click('.item[data-id="' + id + '"] [data-act=edit]'); await pg.fill('#taskform [data-f=title]', '시험 업무(수정)'); await pg.click('[data-act=form-save]');
+    ok(/시험 업무\(수정\)/.test(await pg.textContent('#col-cur')), '업무 수정');
+    await pg.click('.item[data-id="' + id + '"] [data-act=ask]'); await pg.click('.item[data-id="' + id + '"] [data-act=del]');
+    ok(await count(pg, '#col-cur .item') === 9, '업무 삭제(한 번 더 확인)');
+    await pg.click('[data-act=week][data-d="7"]');
+    ok(await count(pg, '#col-cur .item') === 5 && await pg.isEnabled('[data-act=week][data-d="0"]'), '다음 주로 넘기기');
+
+    // 엑셀 업로드 — 파일 2개, 열 순서 다름, 시트 2장, 중복, 날짜 오류
+    var f1 = xlsx(path.join(tmp, '주간업무보고_김민수.xlsx'), { '금주': [['세부내용', '마감일', '주요내용', '날짜'], ['견적 3건 비교\n최종 선정 필요', '2026-11-13', '복지포인트 정산', '2026-11-10'], ['', '2026-11-20', '신규 복지몰 검토', '2026-11-17'], ['', '모름', '날짜 이상한 업무', '2026-11-11']], '메모': [['참고']] });
+    var f2 = xlsx(path.join(tmp, 'weekly.xlsx'), { 's': [['날짜', '주요내용', '마감일', '세부내용'], ['2026-11-12', '비품 발주', '2026-11-14', '']] });
+    await nav('upload');
+    var fc = await Promise.all([pg.waitForEvent('filechooser'), pg.click('#drop')]); await fc[0].setFiles([f1, f2]);
+    await pg.waitForSelector('#up-prev');
+    ok(await count(pg, '#up-files tr') === 3 && await count(pg, '#up-prev tr') === 5, '파일 2개 · 4행 미리보기');
+    ok(await pg.inputValue('[data-ch=up-owner][data-i="0"]') === '김민수' && await pg.inputValue('[data-ch=up-owner][data-i="1"]') === '', '담당자는 파일 이름에서, 없으면 비움');
+    ok(/중복 의심 1건/.test(await pg.textContent('#up-dup')) && await pg.isChecked('[data-ch=up-skip][data-i="0"][data-j="0"]'), '등록된 업무와 같으면 중복 의심 — 기본 「등록 안 함」');
+    ok(/마감일을 읽지 못했습니다\(원문: 모름\)/.test(await pg.textContent('#up-prev')) && /메모[\s\S]*찾지 못했습니다/.test(await pg.textContent('#up-files')), '읽지 못한 날짜 · 머리글 없는 시트를 알린다');
+    ok(/차주/.test(await pg.textContent('#up-prev tr:nth-child(3)')) && /금주/.test(await pg.textContent('#up-prev tr:nth-child(2)')), '날짜로 금주 · 차주 배치');
+    ok(await pg.isDisabled('[data-act=up-commit]') && (await pg.evaluate(function () { return window.__app.db().tasks.length; })) === 14, '담당자가 비면 등록 못 함 · 등록 전에는 반영 안 됨');
+    await pg.fill('[data-ch=up-owner][data-i="1"]', '박서준'); await pg.dispatchEvent('[data-ch=up-owner][data-i="1"]', 'change');
+    await pg.click('[data-act=up-commit]'); await pg.waitForSelector('#up-done');
+    ok(/3건을 등록했습니다/.test(await pg.textContent('#up-done')), '최종 등록 3건(중복 1건 제외)');
+    var st = await pg.evaluate(function () { var t = window.__app.db().tasks.filter(function (x) { return !x.is_sample; }); return [t.length, t.map(function (x) { return x.field + x.status + x.needs_decision; }).join(), t.filter(function (x) { return x.owner === '박서준' && x.source_file === 'weekly.xlsx'; }).length]; });
+    ok(st[0] === 3 && st[1] === 'false,false,false' && st[2] === 1, '분야 · 상태 · 의사결정은 미분류로 등록, 출처 파일 기록', JSON.stringify(st));
+
+    // 보고서 및 이력
+    await nav('hist');
+    ok(/전체 11건/.test((await pg.textContent('#h-report')).replace(/\s+/g, ' ').replace('전체 11 건', '전체 11건')) || /전체\s*11/.test(await pg.textContent('#h-report')), '주차별 보고서(금주 11건)');
+    ok(await count(pg, '#h-report tr.fieldhead') >= 9, '분야별로 묶어 보여 준다');
+    await pg.click('[data-act=tab][data-k=upload]');
+    ok(await count(pg, '#h-logs tr') === 3 && /weekly\.xlsx/.test(await pg.textContent('#h-logs')), '엑셀 업로드 이력 2건');
+    await pg.click('[data-act=tab][data-k=status]');
+    ok(/상태 진행\(미지정\) → 완료/.test(await pg.textContent('#h-logs')) && /삭제/.test(await pg.textContent('#h-logs')), '상태 변경 · 삭제 이력');
+    await pg.click('[data-act=tab][data-k=owner]'); await pg.selectOption('[data-ch=h-owner]', '김민수');
+    ok(await count(pg, '#h-owner tr') === 7, '담당자별 업무 이력');
+    await pg.click('[data-act=tab][data-k=report]');
+    var dl = await Promise.all([pg.waitForEvent('download'), pg.click('[data-act=xlsx]')]); var fx = path.join(tmp, 'rep.xlsx'); await dl[0].saveAs(fx);
+    ok(XLSX.read(fs.readFileSync(fx), { type: 'buffer' }).SheetNames[0] === '주간업무보고', '보고서 엑셀 내려받기');
+
+    // 새로고침 뒤 유지 · 샘플 삭제
+    await pg.reload(); await pg.waitForSelector('#view h2');
+    ok((await pg.evaluate(function () { return window.__app.db().tasks.length; })) === 17, '새로고침 뒤에도 자료가 남는다');
+    await pg.click('[data-act=clear-sample]');
+    ok((await pg.evaluate(function () { var t = window.__app.db().tasks; return t.length + ':' + t.filter(function (x) { return x.is_sample; }).length; })) === '3:0' && await pg.isHidden('#sb-sample'), '샘플 데이터만 지운다(등록한 업무는 유지)');
+    await nav('dash');
+    ok(await pg.textContent('#k-total') === '2', '대시보드가 실제 등록 데이터로 집계');
+    for (var wd of [390, 820]) { await pg.setViewportSize({ width: wd, height: 800 }); for (var p of ['dash', 'status', 'upload', 'hist']) { await nav(p); var over = await pg.evaluate(function () { return document.documentElement.scrollWidth - document.documentElement.clientWidth; }); ok(over <= 1, wd + 'px 가로 넘침 없음 — ' + p, over); } }
+    for (var page of ['guide.html', 'plan.html']) { var rr = await pg.goto(base + page); ok(rr.status() === 200, page + ' 열림'); }
+    ok(errs.length === 0, '페이지 오류 없음', errs.join(' | '));
+  } catch (e) { failed++; console.log('  X 중단: ' + e.message.split('\n')[0]); if (errs.length) console.log('    ' + errs.join(' | ')); }
   await br.close(); srv.close();
-  console.log('\n화면 통과 ' + passed + ' · 실패 ' + failed);
+  console.log('화면 테스트: 통과 ' + passed + ' · 실패 ' + failed);
   process.exit(failed ? 1 : 0);
 });

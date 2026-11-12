@@ -1,0 +1,151 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>주간업무보고</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--line:#e3e8f0;--tx:#1f2937;--sub:#6b7280;--soft:#eef2f7;--navy:#1e2a4a;--blue:#2563eb;--green:#16a34a;--red:#dc2626;--bb:#e8f0fe;--gb:#e7f6ec;--rb:#fdeaea;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0f1420;--card:#1a2130;--line:#2b3447;--tx:#e5e7eb;--sub:#9ca3af;--soft:#232c3f;--bb:#1c2d52;--gb:#14301f;--rb:#3a1a1a}}
+:root[data-theme=dark]{--bg:#0f1420;--card:#1a2130;--line:#2b3447;--tx:#e5e7eb;--sub:#9ca3af;--soft:#232c3f;--bb:#1c2d52;--gb:#14301f;--rb:#3a1a1a}
+*{box-sizing:border-box}html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;font:13px/1.5 'Noto Sans KR',sans-serif;background:var(--bg);color:var(--tx)}
+#app{display:flex;height:100%}
+aside{width:196px;background:var(--navy);color:#cbd5e8;padding:20px 12px;display:flex;flex-direction:column;gap:4px;flex:none}
+aside h1{font-size:15px;color:#fff;margin:0 8px 18px}
+nav{display:flex;flex-direction:column;gap:4px}
+nav button,.sbtn{background:none;border:0;color:inherit;text-align:left;padding:9px 12px;border-radius:7px;font:inherit;cursor:pointer}
+nav button:hover,.sbtn:hover{background:#2a3a63}nav button.on{background:#3b4f85;color:#fff;font-weight:700}
+.sbtn{margin-top:auto;font-size:11.5px;opacity:.8}
+main{flex:1;min-width:0;display:flex;flex-direction:column;padding:20px 24px 16px}
+#view{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column}
+h2{font-size:17px;margin:0 0 14px}h3{font-size:14px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.kpi span{color:var(--sub);display:block}.kpi b{font-size:30px;line-height:1.3}
+.진행,.kpi .진행{color:var(--blue)}.완료{color:var(--green)}.지연{color:var(--red)}
+.g2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}.mi{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)}
+.mi:last-child{border:0}small{color:var(--sub);font-size:11.5px}.mi small{display:block}
+.bd{font-size:11px;font-weight:500;padding:1px 8px;border-radius:10px;height:max-content;white-space:nowrap}
+.bd.진행{background:var(--bb)}.bd.완료{background:var(--gb)}.bd.지연{background:var(--rb)}.bd.미지정{background:var(--soft);color:var(--sub)}
+.em{color:var(--sub);text-align:center;padding:18px 0;margin:0}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--sub);font-weight:500;font-size:12px;white-space:nowrap}
+.wrap{overflow-x:auto}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}.sp{flex:1}
+select,input,textarea,button{font:inherit;color:var(--tx)}
+select,input[type=text],input[type=date],input:not([type]),textarea{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:5px 8px;max-width:100%}
+textarea{width:100%}
+button{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:5px 12px;cursor:pointer}
+button.pri{background:var(--blue);border-color:var(--blue);color:#fff}button.dg{color:var(--red)}
+.chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.cols{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.col{display:flex;flex-direction:column;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.ch{padding:11px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline}
+.list{overflow:auto;flex:1;padding:4px 10px}
+.gh{margin:10px 2px 2px;font-weight:700;color:var(--navy)}
+.item{border-bottom:1px solid var(--line);padding:8px 2px}
+.row{display:flex;justify-content:space-between;gap:8px;cursor:pointer;align-items:flex-start}
+.ti{display:block}.ti i{font-style:normal;font-size:10.5px;margin-left:6px;padding:0 6px;border-radius:8px;background:var(--soft);color:var(--sub)}.ti i.dc{background:var(--rb);color:var(--red)}
+.rt{display:flex;gap:8px;align-items:center;flex:none}.tg{font-size:11.5px;color:var(--sub)}
+.dt{display:none;margin-top:8px;background:var(--soft);border-radius:7px;padding:10px}.item.open .dt{display:block}
+pre{margin:0 0 8px;white-space:pre-wrap;word-break:break-word;font:inherit}
+.act{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ov{display:none;position:fixed;inset:0;background:rgba(15,20,32,.5);z-index:20;align-items:center;justify-content:center;padding:16px}.ov.show{display:flex}
+.mb{background:var(--card);border-radius:12px;padding:20px;width:560px;max-width:100%;max-height:100%;overflow:auto}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}.fg label{display:flex;flex-direction:column;gap:3px;color:var(--sub);font-size:12px}.fg .w2{grid-column:span 2}.fg .ck{flex-direction:row;align-items:center;color:var(--tx)}
+.dz{display:block;border:2px dashed var(--line);border-radius:10px;padding:40px;text-align:center;color:var(--sub);cursor:pointer;background:var(--card)}
+.steps{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}.steps span{padding:4px 12px;border-radius:14px;background:var(--soft);color:var(--sub);font-size:12px}.steps .on{background:var(--navy);color:#fff}
+.warn{color:var(--red);font-size:11.5px}
+#ts{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:8px 18px;border-radius:20px;display:none;z-index:30}
+@media(max-width:800px){#app{flex-direction:column}aside{width:auto;flex-direction:row;align-items:center;padding:8px;overflow-x:auto}aside h1,.sbtn{display:none}nav{flex-direction:row}nav button{white-space:nowrap}main{padding:12px}#view{overflow:auto}.kpis{grid-template-columns:1fr 1fr}.g2,.cols{grid-template-columns:1fr}.cols{flex:none}.col{max-height:70vh}}
+</style></head><body>
+<div id="app"><aside><h1>주간업무보고</h1><nav id="nav"></nav><button class="sbtn" id="sb" onclick="clrSample(this)">샘플 데이터 삭제</button></aside><main><div id="view"></div></main></div>
+<div class="ov" id="md"></div><div id="ts"></div>
+<script>
+/* 데이터 구조 (Supabase 연동 대비)
+ tasks: id, owner, work_date, title, due_date, detail, field, status('' | 진행 | 완료), needs_decision, decision_request, decision_due, reviewed, is_sample, source_file, created_at
+ logs: id, type('status' | 'upload'), at, owner, text   ※ 지연은 저장하지 않고 마감일로 자동 계산 */
+const F=['복리후생 / 총무','사회공헌 / 의전','자산','비상계획'],KEY='wr_v1';
+const $=s=>document.querySelector(s),esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const addD=(s,n)=>{const d=new Date(s+'T00:00:00');d.setDate(d.getDate()+n);return iso(d)};
+const wkS=s=>{if(!s)return'';const d=new Date(s+'T00:00:00');if(isNaN(d))return'';d.setDate(d.getDate()-((d.getDay()+6)%7));return iso(d)};
+const today=iso(new Date()),W0=wkS(today),W1=addD(W0,7),uid=()=>Math.random().toString(36).slice(2,10);
+const md=s=>s?s.slice(5).replace('-','.'):'-',wl=w=>w?md(w)+' 주'+(w===W0?' (금주)':w===W1?' (차주)':''):'주 미지정';
+let DB,P='dash',OPEN=new Set(),SR=false;
+function sample(){const R=[['김민수',0,'임직원 건강검진 업체 선정',0,3,'진행','후보 3개 업체 견적 비교 완료\n최종 업체 선정 필요',1,'업체 선정 승인 요청',4],['김민수',0,'복지포인트 정산',1,2,'완료','11월 정산 마감'],['이지은',1,'연말 기부금 전달식 일정 조율',1,4,'진행','기관 담당자와 일정 협의 중'],['이지은',1,'VIP 방문 의전 준비',2,0,'진행','동선 및 좌석 확인'],['박서준',2,'노후 비품 실사',0,3,'완료','층별 실사 완료'],['박서준',2,'사무공간 재배치안 검토',3,5,'진행','2안 비교\n비용 차이 확인 필요',1,'재배치안 선택 요청',5],['최유진',3,'비상연락망 갱신',0,4,'진행','부서별 회신 취합 중'],['최유진',3,'BCP 훈련 시나리오 작성',2,6,'진행','초안 작성 중'],['김민수',0,'내년 복지제도 개편안 초안',7,11,'','벤치마킹 자료 수집'],['이지은',1,'연말 행사 케이터링 계약',7,10,'','견적 요청 예정'],['박서준',2,'자산 재물조사 계획 수립',8,12,'','',1,'조사 범위 확정 요청',11],['최유진',3,'비상 훈련 실시',9,11,'','']];
+return R.map(r=>({id:uid(),owner:r[0],work_date:addD(W0,r[3]),title:r[2],due_date:addD(W0,r[4]),detail:r[6]||'',field:F[r[1]],status:r[5],needs_decision:!!r[7],decision_request:r[8]||'',decision_due:r[9]!=null?addD(W0,r[9]):'',reviewed:false,is_sample:true,source_file:'',created_at:new Date().toISOString()}))}
+function load(){try{DB=JSON.parse(localStorage.getItem(KEY))}catch(e){}if(!DB||!DB.tasks){DB={tasks:sample(),logs:[]};save()}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(DB))}catch(e){}}
+function toast(m){const t=$('#ts');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',2200)}
+function log(type,owner,text){DB.logs.unshift({id:uid(),type,at:new Date().toLocaleString('ko-KR'),owner,text})}
+const wk=t=>wkS(t.work_date||t.due_date),wkT=w=>DB.tasks.filter(t=>wk(t)===w);
+const eff=t=>t.status==='완료'?'완료':(t.due_date&&t.due_date<today?'지연':(t.status||'미지정'));
+const bd=e=>`<span class="bd ${e}">${e}</span>`,by=(a,b)=>(a.due_date||'9').localeCompare(b.due_date||'9');
+const owners=()=>[...new Set(DB.tasks.map(t=>t.owner).filter(Boolean))].sort();
+function go(p){P=p;document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.p===p));render()}
+function render(){const v=$('#view'),sc=[...v.querySelectorAll('.list')].map(l=>l.scrollTop);v.innerHTML=({dash,stat,upl,hist})[P]();v.querySelectorAll('.list').forEach((l,i)=>l.scrollTop=sc[i]||0);$('#sb').style.display=DB.tasks.some(t=>t.is_sample)?'':'none'}
+/* 대시보드 */
+function dash(){const tw=wkT(W0),c=k=>tw.filter(t=>k.includes(eff(t))).length;
+const kp=(l,n,k)=>`<div class="card kpi"><span>${l}</span><b class="${k}">${n}</b></div>`;
+const mini=t=>`<div class="mi"><div><b>${esc(t.title)}</b><small>${esc(t.owner)} · 마감 ${md(t.due_date)}</small></div>${bd(eff(t))}</div>`;
+const cur=tw.filter(t=>eff(t)!=='완료').sort((a,b)=>(eff(b)==='지연')-(eff(a)==='지연')||by(a,b)).slice(0,6),nx=wkT(W1).sort(by).slice(0,6);
+const ow=owners().map(o=>{const x=tw.filter(t=>t.owner===o),n=k=>x.filter(t=>k.includes(eff(t))).length;return x.length?`<div class="mi"><b>${esc(o)}</b><small><span class="진행">진행 ${n(['진행','미지정'])}</span> · <span class="완료">완료 ${n(['완료'])}</span> · <span class="지연">지연 ${n(['지연'])}</span></small></div>`:''}).join('');
+const dec=DB.tasks.filter(t=>t.needs_decision&&(SR||!t.reviewed)).sort((a,b)=>(a.decision_due||'9').localeCompare(b.decision_due||'9'));
+return `<h2>대시보드</h2><div class="kpis">${kp('금주 전체 업무',tw.length,'')}${kp('진행',c(['진행','미지정']),'진행')}${kp('완료',c(['완료']),'완료')}${kp('지연',c(['지연']),'지연')}</div>
+<div class="card" style="margin-bottom:14px"><h3>주요 업무 현황</h3><div class="g2"><div><small>금주 중요 업무</small>${cur.map(mini).join('')||'<p class="em">없음</p>'}</div><div><small>차주 예정 업무</small>${nx.map(mini).join('')||'<p class="em">없음</p>'}</div><div><small>담당자 및 진행 상태 (금주)</small>${ow||'<p class="em">없음</p>'}</div></div></div>
+<div class="card"><div class="bar" style="margin:0 0 6px"><h3 style="margin:0">의사결정 필요 항목</h3><span class="sp"></span><label><input type="checkbox" ${SR?'checked':''} onchange="SR=this.checked;render()"> 검토 완료 항목 보기</label></div>
+${dec.length?`<div class="wrap"><table><tr><th>업무 제목</th><th>담당자</th><th>요청 내용</th><th>결정 필요일</th><th></th></tr>${dec.map(t=>`<tr><td><b>${esc(t.title)}</b></td><td>${esc(t.owner)}</td><td>${esc(t.decision_request)||'-'}</td><td>${md(t.decision_due)}</td><td><button onclick="rev('${t.id}',${!t.reviewed})">${t.reviewed?'검토 취소':'검토 완료'}</button></td></tr>`).join('')}</table></div>`:'<p class="em">팀장 확인이 필요한 업무가 없습니다</p>'}</div>`}
+function rev(id,v){DB.tasks.find(t=>t.id===id).reviewed=v;save();render()}
+/* 주간업무 현황 */
+let V={view:'all',o:'',f:'',s:''};
+const filt=ts=>ts.filter(t=>(!V.o||t.owner===V.o)&&(!V.f||(t.field||'미분류')===V.f)&&(!V.s||eff(t)===V.s)&&(V.view!=='dec'||t.needs_decision));
+function item(t){const e=eff(t),i=t.id;return `<div class="item ${OPEN.has(i)?'open':''}"><div class="row" onclick="tg('${i}',this)"><div><b class="ti">${esc(t.title)}${t.is_sample?'<i>샘플</i>':''}${t.needs_decision&&!t.reviewed?'<i class="dc">결정 필요</i>':''}</b><span class="tg">날짜 ${md(t.work_date)} · 마감 ${md(t.due_date)} · ${esc(t.owner)} · ${esc(t.field||'미분류')}</span></div><div class="rt">${bd(e)}<button>상세보기</button></div></div>
+<div class="dt"><pre>${esc(t.detail)||'(세부내용 없음)'}</pre>${t.needs_decision?`<pre><b>요청</b> ${esc(t.decision_request)||'-'} (결정 필요일 ${md(t.decision_due)})</pre>`:''}<div class="act"><select onchange="setSt('${i}',this.value)">${[['','미지정'],['진행','진행'],['완료','완료']].map(o=>`<option value="${o[0]}" ${t.status===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>${t.needs_decision?`<label><input type="checkbox" ${t.reviewed?'checked':''} onchange="rev('${i}',this.checked)"> 검토 완료</label>`:''}<span class="sp"></span><button onclick="openForm('${i}')">수정</button><button class="dg" onclick="del('${i}',this)">삭제</button></div></div></div>`}
+function tg(i,el){OPEN.has(i)?OPEN.delete(i):OPEN.add(i);el.parentNode.classList.toggle('open')}
+function col(title,w){const ts=filt(wkT(w)).sort(by);let h;if(V.view==='owner'||V.view==='field'){const g={};ts.forEach(x=>{const k=V.view==='owner'?(x.owner||'미지정'):(x.field||'미분류');(g[k]=g[k]||[]).push(x)});h=Object.keys(g).map(k=>`<div class="gh">${esc(k)} <small>${g[k].length}</small></div>`+g[k].map(item).join('')).join('')}else h=ts.map(item).join('');
+return `<section class="col"><div class="ch"><b>${title}</b><small>${md(w)} 주 · ${ts.length}건</small></div><div class="list">${h||'<p class="em">업무가 없습니다</p>'}</div></section>`}
+function stat(){const sel=(k,o,ph)=>`<select onchange="V.${k}=this.value;render()"><option value="">${ph}</option>${o.map(x=>`<option ${V[k]===x?'selected':''}>${esc(x)}</option>`).join('')}</select>`;
+const vb=[['all','전체'],['owner','담당자별'],['field','분야별'],['dec','의사결정']].map(([k,l])=>`<button class="chip ${V.view===k?'on':''}" onclick="V.view='${k}';render()">${l}</button>`).join('');
+return `<div class="bar">${vb}<span class="sp"></span>${sel('o',owners(),'담당자 전체')}${sel('f',[...F,'미분류'],'분야 전체')}${sel('s',['진행','완료','지연','미지정'],'상태 전체')}<button class="pri" onclick="openForm()">+ 업무 등록</button></div><div class="cols">${col('금주 업무',W0)}${col('차주 업무',W1)}</div>`}
+function setSt(id,v){const t=DB.tasks.find(x=>x.id===id);if(t.status!==v){log('status',t.owner,`${t.title}: ${t.status||'미지정'} → ${v||'미지정'}`);t.status=v;save();render()}}
+function del(id,b){if(!b.dataset.c){b.dataset.c=1;b.textContent='삭제 확인';setTimeout(()=>{b.textContent='삭제';delete b.dataset.c},3000);return}DB.tasks=DB.tasks.filter(t=>t.id!==id);save();render();toast('삭제했습니다')}
+function clrSample(b){if(!b.dataset.c){b.dataset.c=1;b.textContent='한 번 더 누르면 삭제';setTimeout(()=>{b.textContent='샘플 데이터 삭제';delete b.dataset.c},3000);return}DB.tasks=DB.tasks.filter(t=>!t.is_sample);save();render();toast('샘플 데이터를 삭제했습니다')}
+function openForm(id){const t=id?DB.tasks.find(x=>x.id===id):{work_date:today,status:'진행'},v=k=>esc(t[k]||''),I=(k,ty)=>`<input id="f_${k}" type="${ty||'text'}" value="${v(k)}">`;
+$('#md').innerHTML=`<div class="mb"><h3>${id?'업무 수정':'업무 등록'}</h3><div class="fg"><label>날짜${I('work_date','date')}</label><label>마감일${I('due_date','date')}</label><label>담당자<input id="f_owner" list="ol" value="${v('owner')}"><datalist id="ol">${owners().map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label><label>업무 분야<select id="f_field"><option value="">미분류</option>${F.map(f=>`<option ${t.field===f?'selected':''}>${f}</option>`).join('')}</select></label><label>진행 상태<select id="f_status">${[['','미지정'],['진행','진행'],['완료','완료']].map(o=>`<option value="${o[0]}" ${t.status===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label><label class="ck"><input type="checkbox" id="f_needs_decision" ${t.needs_decision?'checked':''}> 팀장 의사결정 필요</label><label class="w2">업무 제목${I('title')}</label><label>결정 필요일${I('decision_due','date')}</label><label>요청 내용${I('decision_request')}</label><label class="w2">세부내용<textarea id="f_detail" rows="5">${esc(t.detail)}</textarea></label></div><div class="act"><span class="sp"></span><button onclick="cl()">취소</button><button class="pri" onclick="sv('${id||''}')">저장</button></div></div>`;$('#md').className='ov show'}
+const cl=()=>$('#md').className='ov';
+function sv(id){const g=k=>$('#f_'+k).value,o={work_date:g('work_date'),due_date:g('due_date'),owner:g('owner').trim(),field:g('field'),status:g('status'),needs_decision:$('#f_needs_decision').checked,title:g('title'),decision_due:g('decision_due'),decision_request:g('decision_request'),detail:g('detail')};
+if(!o.title.trim()||!o.owner)return toast('업무 제목과 담당자를 입력하세요');
+if(id){const t=DB.tasks.find(x=>x.id===id);if(t.status!==o.status)log('status',o.owner,`${o.title}: ${t.status||'미지정'} → ${o.status||'미지정'}`);Object.assign(t,o)}else DB.tasks.push({id:uid(),reviewed:false,is_sample:false,source_file:'',created_at:new Date().toISOString(),...o});
+save();cl();render();toast('저장했습니다')}
+/* 엑셀 업로드 */
+let U={files:[],rows:[]};const nm=s=>String(s).replace(/\s/g,'');
+function ds(v){if(v==='')return'';if(typeof v==='number'){const p=XLSX.SSF.parse_date_code(v);return p?`${p.y}-${String(p.m).padStart(2,'0')}-${String(p.d).padStart(2,'0')}`:''}
+const m=String(v).match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);return m?`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`:''}
+async function rd(fs){U={files:[],rows:[]};for(const f of fs){let wb;try{wb=XLSX.read(await f.arrayBuffer(),{type:'array'})}catch(e){toast(f.name+' 파일을 읽을 수 없습니다');continue}
+const fi=U.files.length,fo={name:f.name,owner:f.name.replace(/\.[^.]+$/,''),sheets:[]};U.files.push(fo);
+wb.SheetNames.forEach(sn=>{const a=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:''}),hi=a.findIndex(r=>r.some(c=>nm(c)==='주요내용'));
+if(hi<0){fo.sheets.push({sn,n:0,err:'제목 행(주요내용)을 찾지 못했습니다'});return}
+const H=a[hi].map(nm),g=(r,k)=>H.indexOf(k)<0?'':r[H.indexOf(k)];let n=0;
+a.slice(hi+1).forEach(r=>{const dv=g(r,'날짜'),dd=g(r,'마감일'),t=g(r,'주요내용'),de=g(r,'세부내용');if([dv,dd,t,de].every(x=>String(x).trim()===''))return;n++;
+U.rows.push({fi,sn,d:ds(dv),du:ds(dd),t:String(t),det:String(de),f:'',s:'',nd:false,on:true,w:(dv!==''&&!ds(dv))||(dd!==''&&!ds(dd))?'날짜 형식을 확인하세요':''})});fo.sheets.push({sn,n})})}
+mark();render()}
+function mark(){const seen=new Set(DB.tasks.map(t=>[t.owner,t.title,t.work_date].join('|')));U.rows.forEach(r=>{const k=[U.files[r.fi].owner.trim(),r.t,r.d].join('|');r.dup=seen.has(k);seen.add(k);if(r.dp!==r.dup){r.on=!r.dup;r.dp=r.dup}})}
+function upl(){const has=U.files.length,st=['파일 업로드','4개 항목 자동 추출','미리보기 및 수정','최종 등록'],cur=has?2:0;
+let h=`<h2>엑셀 업로드</h2><div class="steps">${st.map((s,i)=>`<span class="${i===cur?'on':''}">STEP 0${i+1} ${s}</span>`).join('')}</div>`;
+if(!has)return h+`<label class="dz" ondragover="event.preventDefault()" ondrop="event.preventDefault();rd(event.dataTransfer.files)">XLSX, XLS 파일을 끌어놓거나 눌러서 선택하세요 (여러 파일 가능)<br><small>날짜 · 주요내용 · 마감일 · 세부내용 열을 제목 기준으로 읽어옵니다</small><input type="file" multiple accept=".xlsx,.xls" hidden onchange="rd(this.files)"></label>`;
+h+=U.files.map((f,i)=>`<div class="card" style="margin-bottom:10px"><div class="bar" style="margin:0"><b>${esc(f.name)}</b><span class="sp"></span>담당자 <input value="${esc(f.owner)}" onchange="U.files[${i}].owner=this.value;mark();render()"></div><small>${f.sheets.map(s=>`시트 ${esc(s.sn)}: ${s.err?`<span class="warn">${s.err}</span>`:s.n+'행'}`).join(' / ')}</small></div>`).join('');
+const sel=U.rows.filter(r=>r.on).length,pl=d=>{const w=wkS(d);return w===W0?'금주':w===W1?'차주':w?'기타 주':'배치 불가'};
+return h+`<div class="card"><div class="wrap"><table><tr><th>선택</th><th>시트</th><th>날짜</th><th>업무 제목</th><th>마감일</th><th>세부내용</th><th>분야</th><th>상태</th><th>결정</th></tr>${U.rows.map((r,i)=>`<tr><td><input type="checkbox" ${r.on?'checked':''} onchange="U.rows[${i}].on=this.checked;render()">${r.dup?'<div class="warn">중복 의심</div>':''}</td><td>${esc(r.sn)}</td><td><input type="date" value="${r.d}" onchange="U.rows[${i}].d=this.value;mark();render()"><br><small>${pl(r.d)}</small>${r.w?`<div class="warn">${r.w}</div>`:''}</td><td><textarea rows="2" style="min-width:160px" oninput="U.rows[${i}].t=this.value">${esc(r.t)}</textarea></td><td><input type="date" value="${r.du}" onchange="U.rows[${i}].du=this.value"></td><td><textarea rows="2" style="min-width:200px" oninput="U.rows[${i}].det=this.value">${esc(r.det)}</textarea></td><td><select onchange="U.rows[${i}].f=this.value"><option value="">미분류</option>${F.map(f=>`<option ${r.f===f?'selected':''}>${f}</option>`).join('')}</select></td><td><select onchange="U.rows[${i}].s=this.value">${[['','미지정'],['진행','진행'],['완료','완료']].map(o=>`<option value="${o[0]}" ${r.s===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></td><td><input type="checkbox" ${r.nd?'checked':''} onchange="U.rows[${i}].nd=this.checked"></td></tr>`).join('')||'<tr><td colspan="9" class="em">추출된 업무가 없습니다</td></tr>'}</table></div><div class="act" style="margin-top:12px"><small>중복 의심 업무는 선택하지 않은 상태로 표시됩니다. 최종 등록 전에는 실제 데이터에 반영되지 않습니다.</small><span class="sp"></span><button onclick="U={files:[],rows:[]};render()">취소</button><button class="pri" onclick="commit()">${sel}건 최종 등록</button></div></div>`}
+function commit(){const sel=U.rows.filter(r=>r.on);if(!sel.length)return toast('등록할 업무를 선택하세요');const cnt={};
+sel.forEach(r=>{const fo=U.files[r.fi],o=fo.owner.trim()||'미지정';DB.tasks.push({id:uid(),owner:o,work_date:r.d,title:r.t,due_date:r.du,detail:r.det,field:r.f,status:r.s,needs_decision:r.nd,decision_request:'',decision_due:'',reviewed:false,is_sample:false,source_file:fo.name,created_at:new Date().toISOString()});cnt[o]=(cnt[o]||0)+1});
+Object.keys(cnt).forEach(o=>log('upload',o,`${o} 업무 ${cnt[o]}건 등록`));U={files:[],rows:[]};save();toast(sel.length+'건을 등록했습니다');go('stat')}
+/* 보고서 및 이력 */
+let H={w:W0,q:'',tab:'week',o:''};
+function hist(){const ws=[...new Set([W0,W1,...DB.tasks.map(wk)])].sort().reverse(),q=H.q.trim().toLowerCase(),m=t=>!q||[t.title,t.owner,t.detail,t.field].join(' ').toLowerCase().includes(q);
+const tbl=(ts,wc)=>ts.length?`<div class="wrap"><table><tr>${wc?'<th>주차</th>':''}<th>날짜</th><th>주요내용</th><th>마감일</th><th>담당자</th><th>분야</th><th>상태</th></tr>${ts.map(t=>`<tr>${wc?`<td>${md(wk(t))}</td>`:''}<td>${md(t.work_date)}</td><td><b>${esc(t.title)}</b>${t.detail?`<br><small>${esc(t.detail.slice(0,60))}${t.detail.length>60?'…':''}</small>`:''}</td><td>${md(t.due_date)}</td><td>${esc(t.owner)}</td><td>${esc(t.field||'미분류')}</td><td>${bd(eff(t))}</td></tr>`).join('')}</table></div>`:'<p class="em">내용이 없습니다</p>';
+const lg=ty=>{const l=DB.logs.filter(x=>x.type===ty&&(!q||(x.text+x.owner).toLowerCase().includes(q)));return l.length?`<div class="wrap"><table><tr><th>일시</th><th>담당자</th><th>내용</th></tr>${l.map(x=>`<tr><td>${esc(x.at)}</td><td>${esc(x.owner)}</td><td>${esc(x.text)}</td></tr>`).join('')}</table></div>`:'<p class="em">이력이 없습니다</p>'};
+const body=H.tab==='week'?tbl(DB.tasks.filter(t=>wk(t)===H.w&&m(t)).sort(by)):H.tab==='owner'?tbl(DB.tasks.filter(t=>(!H.o||t.owner===H.o)&&m(t)).sort((a,b)=>(wk(b)).localeCompare(wk(a))||by(a,b)),1):lg(H.tab);
+const tabs=[['week','주차별 보고서'],['owner','담당자별 업무 이력'],['status','상태 변경 이력'],['upload','엑셀 업로드 이력']].map(([k,l])=>`<button class="chip ${H.tab===k?'on':''}" onclick="H.tab='${k}';render()">${l}</button>`).join('');
+return `<h2>보고서 및 이력</h2><div class="bar">${tabs}<span class="sp"></span>${H.tab==='week'?`<select onchange="H.w=this.value;render()">${ws.map(w=>`<option value="${w}" ${H.w===w?'selected':''}>${wl(w)}</option>`).join('')}</select>`:''}${H.tab==='owner'?`<select onchange="H.o=this.value;render()"><option value="">담당자 전체</option>${owners().map(o=>`<option ${H.o===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`:''}<input type="search" placeholder="검색 후 Enter" value="${esc(H.q)}" onchange="H.q=this.value;render()"></div><div class="card">${body}</div>`}
+load();$('#nav').innerHTML=[['dash','대시보드'],['stat','주간업무 현황'],['upl','엑셀 업로드'],['hist','보고서 및 이력']].map(([k,l])=>`<button data-p="${k}" onclick="go('${k}')">${l}</button>`).join('');
+document.addEventListener('keydown',e=>{if(e.key==='Escape')cl()});
+go('dash');
+</script></body></html>
