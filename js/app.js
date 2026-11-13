@@ -85,9 +85,9 @@
     if (!u) return out + '<div class="card"><label class="drop" id="drop" data-act="pick"><b>팀원들의 엑셀 주간업무보고를 끌어다 놓거나 눌러서 고르세요</b><span class="sub">XLSX · XLS · 여러 파일을 한 번에 올릴 수 있습니다 · 파일은 서버로 올라가지 않습니다</span></label>' +
       '<div class="bar" style="margin:12px 0 0"><button class="b" data-act="tpl">엑셀 양식 내려받기</button><button class="b" data-act="tpl-sample">예제 엑셀 3개 내려받기(가짜)</button></div></div>' +
       '<div class="card"><h3>추출하는 항목</h3><div class="wrap"><table><tr><th>엑셀 머리글</th><th>시스템 항목</th><th>비고</th></tr><tr><td>날짜</td><td>업무 날짜</td><td>이 날짜가 속한 주로 금주 · 차주에 배치합니다</td></tr><tr><td>주요내용</td><td>업무 제목</td><td>원문 그대로</td></tr><tr><td>마감일</td><td>완료 예정일</td><td>지나면 지연으로 표시</td></tr><tr><td>세부내용</td><td>업무 상세 내용</td><td>줄바꿈 · 문단 그대로</td></tr></table></div>' +
-      '<p class="sub" style="margin:10px 0 0">열 순서가 달라도 머리글로 찾습니다. 시트가 여러 장이면 시트마다 읽습니다. 담당자는 파일 이름에서 찾고, 없으면 직접 고릅니다. <b>업무분류</b> 열이 있으면 그 값을 쓰고, 비어 있으면 제목 · 세부내용의 낱말로 자동 분류합니다(맞는 낱말이 없으면 미분류). 미리보기에서 고칠 수 있습니다. 진행 상태 · 의사결정 여부는 등록 뒤 「주간업무 현황」에서 지정합니다.</p></div>';
+      '<p class="sub" style="margin:10px 0 0">열 순서가 달라도 머리글로 찾습니다. 시트가 여러 장이면 시트마다 읽습니다. <b>담당자</b> 열이 있으면 그 값을 쓰고, 비어 있으면 업무 내용(「담당: 홍길동」처럼 적힌 이름 · 등록된 담당자 이름)에서 찾고, 그래도 없으면 파일 이름의 담당자를 씁니다. 이름을 지어내지는 않습니다. <b>업무분류</b> 열이 있으면 그 값을 쓰고, 비어 있으면 제목 · 세부내용의 낱말로 자동 분류합니다(맞는 낱말이 없으면 미분류). 미리보기에서 고칠 수 있습니다. 진행 상태 · 의사결정 여부는 등록 뒤 「주간업무 현황」에서 지정합니다.</p></div>';
     if (u.done) return out + '<div class="okb" id="up-done"><b>' + u.done.n + '건을 등록했습니다.</b> 금주 ' + u.done.cur + '건 · 차주 ' + u.done.nxt + '건 · 그 밖의 주 ' + u.done.etc + '건. 분야와 진행 상태는 「주간업무 현황」에서 지정해 주세요.</div><div class="bar"><button class="b pri" data-act="go" data-p="status">주간업무 현황 보기</button><button class="b" data-act="up-reset">다른 파일 올리기</button></div>';
-    var rows = [].concat.apply([], u.files.map(function (f) { return f.rows; })), okN = rows.filter(function (r) { return !r.skip && W.norm(r.title); }).length, dupN = rows.filter(function (r) { return r.dup; }).length, noOwner = u.files.filter(function (f) { return !f.owner.trim() && f.rows.some(function (r) { return !r.skip; }); });
+    var rows = [].concat.apply([], u.files.map(function (f) { return f.rows; })), okN = rows.filter(function (r) { return !r.skip && W.norm(r.title); }).length, dupN = rows.filter(function (r) { return r.dup; }).length, noOwner = u.files.filter(function (f) { return !f.owner.trim() && f.rows.some(function (r) { return !r.skip && !(r.own || '').trim(); }); });
     out += '<div class="card"><h3>올린 파일 ' + u.files.length + '개 <small>담당자를 확인해 주세요</small></h3><div class="wrap"><table id="up-files"><tr><th>파일</th><th>담당자</th><th>시트</th><th>추출</th></tr>' + u.files.map(function (f, i) {
       return '<tr><td>' + h(f.file) + '</td><td><input type="text" list="owners" data-ch="up-owner" data-i="' + i + '" value="' + h(f.owner) + '" placeholder="담당자 이름"' + (f.owner.trim() ? '' : ' style="border-color:var(--red)"') + '></td><td>' + f.sheets.map(function (s) { return h(s.sheet) + (s.ok ? ' ' + s.count + '건' + (s.missing.length ? ' <span class="bad">(없는 열: ' + s.missing.map(function (k) { return { work_date: '날짜', due_date: '마감일', detail: '세부내용' }[k]; }).join(', ') + ')</span>' : '') : ' <span class="bad">— ' + h(s.error) + '</span>'); }).join('<br>') + '</td><td>' + f.rows.length + '건</td></tr>';
     }).join('') + '</table></div><datalist id="owners">' + ownerList().map(function (o) { return '<option value="' + h(o) + '">'; }).join('') + '</datalist></div>';
@@ -95,7 +95,7 @@
     out += '<div class="card"><h3>추출 데이터 미리보기 <small>등록 전에는 실제 업무에 반영되지 않습니다 · 원문은 그대로이며 여기서 고칠 수 있습니다</small></h3><div class="wrap"><table class="prev" id="up-prev"><tr><th>등록 안 함</th><th>담당자</th><th>날짜</th><th>주요내용</th><th>마감일</th><th>세부내용</th><th>업무분류</th><th>배치</th><th>확인</th></tr>' + (u.files.map(function (f, i) {
       return f.rows.map(function (r, j) {
         var k = 'data-i="' + i + '" data-j="' + j + '"';
-        return '<tr class="' + (r.skip ? 'skip' : '') + (r.flags.length || r.dup ? ' flag' : '') + '"><td><input type="checkbox" data-ch="up-skip" ' + k + (r.skip ? ' checked' : '') + '></td><td>' + (h(f.owner) || '<span class="bad">미지정</span>') + '</td><td><input type="date" data-ch="up-cell" data-k="work_date" ' + k + ' value="' + h(r.work_date) + '"></td><td><input type="text" data-ch="up-cell" data-k="title" ' + k + ' value="' + h(r.title) + '"></td><td><input type="date" data-ch="up-cell" data-k="due_date" ' + k + ' value="' + h(r.due_date) + '"></td><td><textarea data-ch="up-cell" data-k="detail" ' + k + '>' + h(r.detail) + '</textarea></td><td><select data-ch="up-cell" data-k="field" ' + k + '>' + opts(W.FIELDS, r.field || '', W.NONE) + '</select>' + (r.field_src === 'auto' ? '<small class="auto" title="' + h((r.field_why || []).join(', ')) + '">' + (r.field ? '자동 · ' + h((r.field_why || []).slice(0, 3).join(', ')) : '자동 분류 못 함') + '</small>' : r.field_src === 'file' ? '<small class="auto">엑셀 값</small>' : '<small class="auto">직접 고름</small>') + '</td><td>' + h(W.placement(r, TODAY)) + '</td><td>' + (r.dup ? '<span class="bad">중복 의심</span> ' + h(r.dup) + '<br>' : '') + r.flags.map(function (x) { return '<span class="bad">' + h(x) + '</span>'; }).join('<br>') + '<small>' + h(r.sheet) + ' ' + r.row + '행</small></td></tr>';
+        return '<tr class="' + (r.skip ? 'skip' : '') + (r.flags.length || r.dup ? ' flag' : '') + '"><td><input type="checkbox" data-ch="up-skip" ' + k + (r.skip ? ' checked' : '') + '></td><td><input type="text" list="owners" class="own" data-ch="up-cell" data-k="own" ' + k + ' value="' + h(r.own || '') + '" placeholder="' + h(f.owner || '담당자') + '"><small class="auto">' + (r.own_src === 'file' ? '엑셀 값' : r.own_src === 'auto' ? '자동 · ' + h(r.own_why || '') : r.own_src === 'manual' ? '직접 고름' : (f.owner ? '파일 담당자 ' + h(f.owner) : '<span class="bad">미지정</span>')) + '</small></td><td><input type="date" data-ch="up-cell" data-k="work_date" ' + k + ' value="' + h(r.work_date) + '"></td><td><input type="text" data-ch="up-cell" data-k="title" ' + k + ' value="' + h(r.title) + '"></td><td><input type="date" data-ch="up-cell" data-k="due_date" ' + k + ' value="' + h(r.due_date) + '"></td><td><textarea data-ch="up-cell" data-k="detail" ' + k + '>' + h(r.detail) + '</textarea></td><td><select data-ch="up-cell" data-k="field" ' + k + '>' + opts(W.FIELDS, r.field || '', W.NONE) + '</select>' + (r.field_src === 'auto' ? '<small class="auto" title="' + h((r.field_why || []).join(', ')) + '">' + (r.field ? '자동 · ' + h((r.field_why || []).slice(0, 3).join(', ')) : '자동 분류 못 함') + '</small>' : r.field_src === 'file' ? '<small class="auto">엑셀 값</small>' : '<small class="auto">직접 고름</small>') + '</td><td>' + h(W.placement(r, TODAY)) + '</td><td>' + (r.dup ? '<span class="bad">중복 의심</span> ' + h(r.dup) + '<br>' : '') + r.flags.map(function (x) { return '<span class="bad">' + h(x) + '</span>'; }).join('<br>') + '<small>' + h(r.sheet) + ' ' + r.row + '행</small></td></tr>';
       }).join('');
     }).join('') || '<tr><td colspan="8" class="em">추출된 행이 없습니다 — 머리글(날짜 · 주요내용 · 마감일 · 세부내용)을 확인해 주세요</td></tr>') + '</table></div>' +
       (noOwner.length ? '<p class="bad" id="up-noowner" style="margin:10px 0 0">담당자가 비어 있는 파일이 있습니다: ' + noOwner.map(function (f) { return h(f.file); }).join(', ') + '</p>' : '') +
@@ -108,7 +108,7 @@
     Promise.all(list.map(function (f) {
       return new Promise(function (res) {
         var r = new FileReader();
-        r.onload = function () { try { var wb = XLSX.read(r.result, { type: 'array' }), sheets = {}; wb.SheetNames.forEach(function (n) { sheets[n] = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }); }); res(W.extractBook({ names: wb.SheetNames, sheets: sheets }, f.name, +TODAY.slice(0, 4))); } catch (e) { res({ file: f.name, owner: '', sheets: [{ sheet: '-', ok: false, error: '엑셀을 읽지 못했습니다(' + e.message + ')', count: 0 }], rows: [] }); } };
+        r.onload = function () { try { var wb = XLSX.read(r.result, { type: 'array' }), sheets = {}; wb.SheetNames.forEach(function (n) { sheets[n] = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }); }); res(W.extractBook({ names: wb.SheetNames, sheets: sheets }, f.name, +TODAY.slice(0, 4), ownerList())); } catch (e) { res({ file: f.name, owner: '', sheets: [{ sheet: '-', ok: false, error: '엑셀을 읽지 못했습니다(' + e.message + ')', count: 0 }], rows: [] }); } };
         r.onerror = function () { res({ file: f.name, owner: '', sheets: [{ sheet: '-', ok: false, error: '파일을 읽지 못했습니다', count: 0 }], rows: [] }); };
         r.readAsArrayBuffer(f);
       });
@@ -116,7 +116,7 @@
   }
   /** 중복 의심 다시 계산. first 면 중복 행을 기본 「등록 안 함」으로 */
   function remark(first) {
-    var all = []; ui.up.files.forEach(function (f) { f.rows.forEach(function (r) { r.owner = f.owner; r.file = f.file; all.push(r); }); });
+    var all = []; ui.up.files.forEach(function (f) { f.rows.forEach(function (r) { r.owner = (r.own || '').trim() || f.owner; r.file = f.file; all.push(r); }); });   // 행의 담당자(엑셀 · 자동 · 직접)가 있으면 그것, 없으면 파일 담당자
     var active = all.filter(function (r) { return first || !r.skip || r.dup; });
     W.markDuplicates(active, DB.tasks);
     all.forEach(function (r) { if (active.indexOf(r) < 0) r.dup = ''; if (first) r.skip = !!r.dup || !W.norm(r.title); });
@@ -190,13 +190,13 @@
     del: function (el) { var t = task(el.dataset.id); DB.tasks = DB.tasks.filter(function (x) { return x.id !== t.id; }); log('delete', t, '「' + t.title + '」 삭제'); ui.confirm = ''; save(); toast('삭제했습니다'); render(); },
     pick: function () { pick('.xlsx,.xls', true, readFiles); },
     tpl: function () {   // 업무분류 칸에 선택 목록을 넣는다 — SheetJS 는 데이터 유효성을 쓰지 못해 만든 파일의 시트 XML 에 끼운다
-      var wb = wbOf(W.templateAoa()); wb.Sheets[wb.SheetNames[0]]['!cols'] = [{ wch: 12 }, { wch: 34 }, { wch: 12 }, { wch: 44 }, { wch: 18 }];
+      var wb = wbOf(W.templateAoa()); wb.Sheets[wb.SheetNames[0]]['!cols'] = [{ wch: 12 }, { wch: 34 }, { wch: 12 }, { wch: 44 }, { wch: 18 }, { wch: 12 }];
       var data = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }), out = data;
       try {
         var z = XLSX.CFB.read(new Uint8Array(data), { type: 'array' }), ix = -1; z.FullPaths.forEach(function (p, i) { if (/xl\/worksheets\/sheet1\.xml$/.test(p)) ix = i; });
         var fe = z.FileIndex[ix], xml = new TextDecoder().decode(new Uint8Array(fe.content));
         if (xml.indexOf('</sheetData>') < 0) throw new Error('sheetData 없음');
-        var bytes = new TextEncoder().encode(xml.replace('</sheetData>', '</sheetData>' + W.dropdownXml('E')));
+        var bytes = new TextEncoder().encode(xml.replace('</sheetData>', '</sheetData>' + W.dropdownXml('E', 500, ownerList())));
         fe.content = bytes; fe.size = bytes.length; out = XLSX.CFB.write(z, { type: 'array', fileType: 'zip' });
       } catch (err) { out = data; }
       var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = '주간업무보고_양식.xlsx'; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
@@ -210,10 +210,10 @@
       var u = ui.up, n = 0, cur = 0, nxt = 0;
       u.files.forEach(function (f) {
         var rows = f.rows.filter(function (r) { return !r.skip && W.norm(r.title); }); if (!rows.length) return;
-        rows.forEach(function (r) { r.owner = f.owner; r.file = f.file; });
+        rows.forEach(function (r) { r.owner = (r.own || '').trim() || f.owner; r.file = f.file; });   // 행의 담당자가 우선(v2.2)
         var ts = W.rowsToTasks(rows); ts.forEach(function (t) { DB.tasks.push(t); var w = W.taskWeek(t); if (w === W0) cur++; else if (w === W.addDays(W0, 7)) nxt++; });
         n += ts.length;
-        DB.logs.unshift({ id: W.uid(), type: 'upload', at: new Date().toISOString(), owner: f.file, task_id: '', text: f.owner + ' · ' + ts.length + '건 등록' + (f.rows.length - ts.length ? ' · ' + (f.rows.length - ts.length) + '건 제외' : '') + ' · 시트 ' + f.sheets.filter(function (s) { return s.ok; }).map(function (s) { return s.sheet; }).join(', ') });
+        DB.logs.unshift({ id: W.uid(), type: 'upload', at: new Date().toISOString(), owner: f.file, task_id: '', text: (f.owner || ts.map(function (t) { return t.owner; }).filter(function (x, i, arr) { return x && arr.indexOf(x) === i; }).join(', ') || '담당자 미지정') + ' · ' + ts.length + '건 등록' + (f.rows.length - ts.length ? ' · ' + (f.rows.length - ts.length) + '건 제외' : '') + ' · 시트 ' + f.sheets.filter(function (s) { return s.ok; }).map(function (s) { return s.sheet; }).join(', ') });
       });
       if (!save()) return;
       ui.up = { files: [], done: { n: n, cur: cur, nxt: nxt, etc: n - cur - nxt } }; render();
@@ -232,7 +232,7 @@
     'set-field': function (el) { var t = task(el.dataset.id); t.field = el.value; t.updated_at = new Date().toISOString(); log('edit', t, '「' + t.title + '」 분야 → ' + (t.field || '미분류')); save(); render(); },
     'up-owner': function (el) { ui.up.files[+el.dataset.i].owner = el.value.trim(); remark(false); render(); },
     'up-skip': function (el) { ui.up.files[+el.dataset.i].rows[+el.dataset.j].skip = el.checked; render(); },
-    'up-cell': function (el) { var r = ui.up.files[+el.dataset.i].rows[+el.dataset.j]; r[el.dataset.k] = el.value; if (el.dataset.k === 'field') { r.field_src = 'manual'; return render(); } if (el.dataset.k !== 'detail') { r.flags = r.flags.filter(function (x) { return el.dataset.k === 'work_date' ? !/^날짜를/.test(x) : el.dataset.k === 'due_date' ? !/^마감일을/.test(x) : !/^주요내용이/.test(x); }); if (el.dataset.k === 'title' && !W.norm(r.title)) r.flags.push('주요내용이 비어 있습니다'); remark(false); render(); } },
+    'up-cell': function (el) { var r = ui.up.files[+el.dataset.i].rows[+el.dataset.j]; r[el.dataset.k] = el.value; if (el.dataset.k === 'field') { r.field_src = 'manual'; return render(); } if (el.dataset.k === 'own') { r.own = el.value.trim(); r.own_src = r.own ? 'manual' : ''; remark(false); return render(); } if (el.dataset.k !== 'detail') { r.flags = r.flags.filter(function (x) { return el.dataset.k === 'work_date' ? !/^날짜를/.test(x) : el.dataset.k === 'due_date' ? !/^마감일을/.test(x) : !/^주요내용이/.test(x); }); if (el.dataset.k === 'title' && !W.norm(r.title)) r.flags.push('주요내용이 비어 있습니다'); remark(false); render(); } },
     'h-week': function (el) { ui.hweek = el.value; render(); }, 'h-owner': function (el) { ui.howner = el.value; render(); },
     'h-q': function (el) { ui.q = el.value; render(); var q = document.querySelector('[data-ch="h-q"]'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
   };
@@ -248,6 +248,6 @@
 
   load();
   var p0 = location.hash.slice(1); if (pages[p0]) ui.page = p0;
-  window.__app = { db: function () { return DB; }, today: TODAY };
+  window.__app = { db: function () { return DB; }, today: TODAY, save: function () { save(); } };
   render();
 })();

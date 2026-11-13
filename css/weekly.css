@@ -93,3 +93,4 @@ tr.skip td{opacity:.5;} tr.flag td{background:#fffaf0;} .bad{color:var(--red);fo
 
 /* v2.1 업무분류 */
 #up-prev select{min-width:128px;} #up-prev small.auto{display:block;font-size:11px;color:#6b7a99;margin-top:3px;max-width:150px;white-space:normal;}
+#up-prev input.own{min-width:92px;max-width:120px;}

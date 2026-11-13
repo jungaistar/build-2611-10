@@ -17,7 +17,7 @@ eq([W.parseDate(46338), W.parseDate('2026-11-09'), W.parseDate('2026.11.9'), W.p
 eq([W.parseDate(''), W.parseDate(null), W.parseDate('미정'), W.parseDate('2026-02-30'), W.parseDate('13/45', 2026), W.parseDate(5)], ['', '', '', '', '', ''], '읽지 못하는 날짜는 빈 값(지어내지 않는다)');
 
 /* 머리글 · 추출 */
-eq(['날짜', '주요내용', '마감일', '세부내용', ' 주요 내용 ', '완료예정일', '업무명', '비고', '담당', ''].map(W.headKey), ['work_date', 'title', 'due_date', 'detail', 'title', 'due_date', 'title', 'detail', '', ''], '머리글로 항목 식별');
+eq(['날짜', '주요내용', '마감일', '세부내용', ' 주요 내용 ', '완료예정일', '업무명', '비고', '담당', ''].map(W.headKey), ['work_date', 'title', 'due_date', 'detail', 'title', 'due_date', 'title', 'detail', 'owner', ''], '머리글로 항목 식별(v2.2 — 「담당」은 담당자 열)');
 var aoa = [['주간업무보고'], [], ['세부내용', '마감일', '번호', '주요내용', '날짜'],
   ['1안 검토\n  2안 검토\n\n비용 확인 ', '2026-11-13', 1, ' 건강검진 업체 선정 ', '2026-11-09'], ['', '', 2, '복지포인트 정산', 46336], ['메모만', '', 3, '', ''], ['', '', '', '', ''], ['', '미정', 4, '날짜 이상', '어제']];
 var insp = W.inspectSheet(aoa);
@@ -69,7 +69,7 @@ eq(W.weeks(W.sample(T)), ['2026-11-16', '2026-11-09'], '주차 목록(최근 먼
 var saved = W.fromSaved(JSON.stringify({ tasks: [{ id: 'a', title: 'x', owner: 'k' }] }));
 ok(saved.tasks[0].title === 'x' && saved.tasks[0].needs_decision === false && saved.tasks[0].field === '' && saved.logs.length === 0, '저장본 읽기 — 빠진 칸은 기본값');
 eq([W.fromSaved('{bad'), W.fromSaved('{"rows":[]}'), W.fromSaved(null)], [null, null, null], '모르는 저장본은 읽지 않는다');
-eq(W.templateAoa()[0], ['날짜', '주요내용', '마감일', '세부내용', '업무분류'], '양식의 머리글 5개(v2.1 업무분류)');
+eq(W.templateAoa()[0], ['날짜', '주요내용', '마감일', '세부내용', '업무분류', '담당자'], '양식의 머리글 6개(v2.1 업무분류 · v2.2 담당자)');
 
 /* v2.1 업무분류 */
 eq(['업무분류', '업무 분야', '분류', 'Category'].map(W.headKey), ['field', 'field', 'field', 'field'], '업무분류 머리글');
@@ -87,6 +87,24 @@ eq(W.inspectSheet([['날짜', '주요내용']]).missing, ['due_date', 'detail'],
 var ft = W.rowsToTasks([{ title: '가', field: '자산', owner: 'x' }, { title: '나', field: '미분류' }, { title: '다', field: '' }, { title: '라', field: '엉뚱' }]);
 eq(ft.map(function (t) { return t.field; }), ['자산', '', '', ''], '등록 — 미리보기의 분류를 저장, 미분류 · 모르는 값은 빈 값');
 ok(/type="list"/.test(W.dropdownXml('E')) && /sqref="E2:E500"/.test(W.dropdownXml('E')) && W.dropdownXml('E').indexOf('"복리후생 / 총무,사회공헌 / 의전,자산,비상계획,미분류"') > 0, '양식의 선택 목록 — 5개 항목');
+
+/* v2.2 담당자 */
+var KN = ['김민수', '박서준', '이하늘'];
+eq(W.findOwner('회의 준비', '담당: 최영희 과장', KN), { owner: '최영희', why: '「담당: 최영희 과장」', known: false }, '「담당: 이름」으로 적힌 이름 — 등록 목록에 없어도 적힌 대로');
+eq([W.findOwner('통근버스 계약', '담당자 박서준', KN).owner, W.findOwner('통근버스 계약', '담당자 박서준', KN).known], ['박서준', true], '적힌 이름이 등록 목록에 있으면 그 이름');
+eq(W.findOwner('김민수 대리와 견적 검토', '', KN).owner, '김민수', '등록된 담당자 이름이 글에 한 사람만 나오면 그 사람');
+eq([W.findOwner('김민수, 박서준 합동 점검', '', KN).owner, /여럿/.test(W.findOwner('김민수, 박서준 합동 점검', '', KN).why)], ['', true], '이름이 여럿 나오면 고르지 않는다(빈칸)');
+eq([W.findOwner('비품 발주', '', KN).owner, W.findOwner('담당자 미정 건', '', KN).owner, W.findOwner('담당 변경 검토', '', KN).owner, W.findOwner('김민수 건', '', []).owner], ['', '', '', ''], '확인할 수 없으면 빈칸 — 이름을 지어내지 않는다(「미정」「변경」은 이름이 아님, 목록이 없으면 글 속 이름을 추측하지 않음)');
+var oa = [['날짜', '주요내용', '마감일', '세부내용', '업무분류', '담당자'], ['2026-11-09', '김민수와 견적 검토', '', '', '', '이하늘'], ['2026-11-09', '김민수와 견적 검토', '', '', '', ''], ['2026-11-09', '비품 발주', '', '', '', ' ']];
+var ox = W.extractSheet(oa, W.inspectSheet(oa), 2026, KN);
+eq(ox.map(function (r) { return [r.own, r.own_src]; }), [['이하늘', 'file'], ['김민수', 'auto'], ['', '']], '담당자 — 엑셀 값이 우선, 비었으면 글에서, 못 찾으면 빈칸');
+eq(W.inspectSheet([['날짜', '주요내용', '마감일', '세부내용']]).missing, [], '담당자 열은 없어도 「없는 열」로 세지 않는다');
+eq(W.extractSheet([['주요내용', '날짜'], ['김민수 건', '2026-11-09']], W.inspectSheet([['주요내용', '날짜']]), 2026)[0].own, '', '등록 목록을 넘기지 않으면 자동으로 찾지 않는다');
+var dx = W.dropdownXml('E', 500, KN);
+ok(/count="2"/.test(dx) && /sqref="F2:F500"/.test(dx) && dx.indexOf('"김민수,박서준,이하늘"') > 0 && /showErrorMessage="0"[^>]*sqref="F2/.test(dx), '양식 — 담당자 칸 선택 목록(목록에 없는 이름도 적을 수 있게 오류는 끔)');
+ok(/count="1"/.test(W.dropdownXml('E', 500, [])) && W.dropdownXml('E').indexOf('F2') < 0, '등록된 담당자가 없으면 담당자 목록은 넣지 않는다');
+var longO = []; for (var li = 0; li < 80; li++) longO.push('담당자' + li);
+ok((/sqref="F2:F500"><formula1>"([^"]*)"/.exec(W.dropdownXml('E', 500, longO)) || [0, ''])[1].length <= 250, '담당자가 많으면 엑셀 한도(255자) 안에서 자른다');
 
 console.log('규칙 테스트: 통과 ' + passed + ' · 실패 ' + failed);
 process.exit(failed ? 1 : 0);

@@ -52,8 +52,22 @@
     ['title', /^(주요내용|주요업무|업무내용|업무명|업무제목|제목|내용|title)$/],
     ['due_date', /^(마감일|마감|기한|완료예정일|완료예정|예정일|납기|duedate|due)$/],
     ['detail', /^(세부내용|세부사항|상세내용|상세|비고|detail|details)$/],
-    ['field', /^(업무분류|업무분야|분류|분야|category)$/]
+    ['field', /^(업무분류|업무분야|분류|분야|category)$/],
+    ['owner', /^(담당자|담당|작성자|담당자명|owner)$/]
   ];
+  /* ───────────── 담당자(v2.2) ─────────────
+   * 엑셀에 적혀 있으면 그 값, 비어 있으면 제목 · 세부내용에서 찾는다. 찾는 방법은 두 가지뿐이다:
+   *  ① 「담당: 홍길동」「담당자 홍길동」처럼 적혀 있는 이름  ② 이미 등록된 담당자 이름이 글에 그대로 나오는 경우(한 사람일 때만)
+   * 그 밖에는 이름을 지어내지 않고 빈칸으로 둔다. */
+  function findOwner(title, detail, known) {
+    var text = txt(title) + '\n' + txt(detail), m = /담당자?\s*[:：)\]]?\s*([가-힣]{2,4})(?:\s*(?:님|씨|과장|대리|차장|부장|사원|주임|책임|매니저|팀장|프로))?(?![가-힣])/.exec(text);
+    var list = (known || []).filter(Boolean);
+    if (m && !STOP.test(m[1]) && !/^(미정|없음|미지정|확인|지정|배정|변경|교체|부재)$/.test(m[1])) { var hit = list.filter(function (o) { return o === m[1]; })[0]; return { owner: hit || m[1], why: '「' + m[0].trim() + '」', known: !!hit }; }
+    var found = list.filter(function (o) { return o.length >= 2 && text.indexOf(o) >= 0; });
+    found = found.filter(function (o) { return !found.some(function (x) { return x !== o && x.indexOf(o) >= 0; }); });   // 「김민수」와 「민수」가 함께 걸리면 긴 쪽
+    if (found.length === 1) return { owner: found[0], why: '등록된 담당자 이름', known: true };
+    return { owner: '', why: found.length > 1 ? '이름이 여럿 나옴(' + found.join(', ') + ')' : '', known: false };
+  }
   /* ───────────── 업무분류(v2.1) ─────────────
    * 엑셀에 적혀 있으면 그 값을 쓰고, 비어 있으면 제목 · 세부내용의 낱말로 자동 분류한다.
    * 자동 분류는 낱말 규칙이다(외부 AI 를 부르지 않는다). 맞는 낱말이 없거나 두 분류가 같은 점수면 미분류로 두고 사람이 고른다. */
@@ -88,7 +102,7 @@
     for (var r = 0; r < Math.min((aoa || []).length, 20); r++) {
       var map = {}, row = aoa[r] || [];
       row.forEach(function (v, c) { var k = headKey(v); if (k && map[k] == null) map[k] = c; });
-      if (map.title != null && Object.keys(map).length >= 2) return { ok: true, headerRow: r, map: map, missing: HEAD.map(function (h) { return h[0]; }).filter(function (k) { return k !== 'field' && map[k] == null; }) };   // 업무분류 열은 없어도 된다(자동 분류)
+      if (map.title != null && Object.keys(map).length >= 2) return { ok: true, headerRow: r, map: map, missing: HEAD.map(function (h) { return h[0]; }).filter(function (k) { return k !== 'field' && k !== 'owner' && map[k] == null; }) };   // 업무분류 · 담당자 열은 없어도 된다(자동)
     }
     return { ok: false, error: '「주요내용」 머리글이 있는 줄을 찾지 못했습니다' };
   }
@@ -96,7 +110,7 @@
    * 시트 → 행. 원문은 그대로 둔다(앞뒤 공백도 줄바꿈도 고치지 않는다 — 셀 값 전체가 빈칸일 때만 빈 값).
    * 날짜를 읽지 못하면 date_raw 에 원문을 남기고 flag 를 단다.
    */
-  function extractSheet(aoa, insp, baseYear) {
+  function extractSheet(aoa, insp, baseYear, known) {
     var out = [], m = insp.map, cell = function (row, k) { return m[k] == null ? '' : row[m[k]]; };
     for (var r = insp.headerRow + 1; r < aoa.length; r++) {
       var row = aoa[r] || [], t = txt(cell(row, 'title')), dt = txt(cell(row, 'detail'));
@@ -110,6 +124,10 @@
       var rawF = txt(cell(row, 'field')).trim(), nf = normField(rawF);
       if (nf) { o.field = nf === NONE ? '' : nf; o.field_src = 'file'; }
       else { var c = classify(o.title, o.detail); o.field = c.field; o.field_src = 'auto'; o.field_why = c.why; if (rawF) o.flags.push('업무분류 「' + rawF + '」는 목록에 없어 자동 분류했습니다'); }
+      // 담당자(행마다) — 적혀 있으면 그대로, 비었으면 글에서 찾고, 못 찾으면 빈칸(파일 담당자가 대신 쓰인다)
+      var rawO = txt(cell(row, 'owner')).trim();
+      if (rawO) { o.own = rawO; o.own_src = 'file'; }
+      else { var fo = findOwner(o.title, o.detail, known); o.own = fo.owner; o.own_src = fo.owner ? 'auto' : ''; o.own_why = fo.why; }
       out.push(o);
     }
     return out;
@@ -122,12 +140,12 @@
     return best;
   }
   /** 통합문서(시트 여러 장) → 미리보기 행. 등록 전에는 아무것도 저장하지 않는다 */
-  function extractBook(book, fileName, baseYear) {
+  function extractBook(book, fileName, baseYear, known) {
     var sheets = [], rows = [];
     (book.names || Object.keys(book.sheets)).forEach(function (n) {
       var aoa = book.sheets[n], insp = inspectSheet(aoa);
       if (!insp.ok) { sheets.push({ sheet: n, ok: false, error: insp.error, count: 0 }); return; }
-      var ex = extractSheet(aoa, insp, baseYear);
+      var ex = extractSheet(aoa, insp, baseYear, known);
       sheets.push({ sheet: n, ok: true, count: ex.length, missing: insp.missing });
       ex.forEach(function (x) { x.sheet = n; rows.push(x); });
     });
@@ -203,9 +221,16 @@
     [['금주', rep.cur], ['차주', rep.next]].forEach(function (p) { p[1].forEach(function (g) { g.tasks.forEach(function (t) { rows.push([p[0], g.field, t.work_date, t.title, t.due_date, t.owner, eff(t, today), t.needs_decision ? (t.reviewed ? '검토 완료' : '결정 필요: ' + t.decision_request) : '', t.detail]); }); }); });
     return { '주간업무보고': rows };
   }
-  function templateAoa() { return [['날짜', '주요내용', '마감일', '세부내용', '업무분류'], ['2026-11-09', '예) 임직원 건강검진 업체 선정', '2026-11-13', '예) 후보 3개 업체 견적 비교\n최종 업체 선정 필요', FIELDS[0]]]; }
-  /** 양식의 업무분류 칸에 넣을 선택 목록(엑셀 데이터 유효성) — 워크시트 XML 에 끼울 조각. col 은 열 글자 */
-  function dropdownXml(col, last) { return '<dataValidations count="1"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="업무분류" error="목록에서 골라 주세요" promptTitle="업무분류" prompt="비워 두면 올릴 때 자동으로 분류합니다" sqref="' + col + '2:' + col + (last || 500) + '"><formula1>"' + FIELDS.concat([NONE]).join(',') + '"</formula1></dataValidation></dataValidations>'; }
+  function templateAoa() { return [['날짜', '주요내용', '마감일', '세부내용', '업무분류', '담당자'], ['2026-11-09', '예) 임직원 건강검진 업체 선정', '2026-11-13', '예) 후보 3개 업체 견적 비교\n최종 업체 선정 필요', FIELDS[0], '']]; }
+  /** 양식에 넣을 선택 목록(엑셀 데이터 유효성) — 워크시트 XML 에 끼울 조각. owners 가 있으면 담당자 칸(F)에도 넣는다(목록에 없는 이름도 적을 수 있게 오류는 띄우지 않는다) */
+  function dropdownXml(col, last, owners) {
+    var esc = function (t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;&quot;'); };
+    var one = '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="업무분류" error="목록에서 골라 주세요" promptTitle="업무분류" prompt="비워 두면 올릴 때 자동으로 분류합니다" sqref="' + col + '2:' + col + (last || 500) + '"><formula1>"' + FIELDS.concat([NONE]).join(',') + '"</formula1></dataValidation>';
+    var os = (owners || []).filter(function (o) { return o && !/[,"]/.test(o); }), ol = os.join(',');
+    while (ol.length > 250 && os.length) { os.pop(); ol = os.join(','); }   // 엑셀의 목록 글자 수 한도(255)
+    var two = os.length ? '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="0" promptTitle="담당자" prompt="목록에서 고르거나 직접 적습니다. 비워 두면 파일 이름 · 업무 내용에서 찾습니다" sqref="F2:F' + (last || 500) + '"><formula1>"' + esc(ol) + '"</formula1></dataValidation>' : '';
+    return '<dataValidations count="' + (two ? 2 : 1) + '">' + one + two + '</dataValidations>';
+  }
 
   /* ───────────── 샘플(가짜) — 실제 등록 데이터와 is_sample 로 구분 ───────────── */
   function sample(today) {
@@ -241,6 +266,6 @@
     parseDate: parseDate, headKey: headKey, inspectSheet: inspectSheet, extractSheet: extractSheet, extractBook: extractBook, ownerFromFile: ownerFromFile,
     blankTask: blankTask, eff: eff, taskWeek: taskWeek, weekTasks: weekTasks, byDue: byDue, counts: counts, owners: owners, filter: filter, dashboard: dashboard,
     markDuplicates: markDuplicates, rowsToTasks: rowsToTasks, placement: placement, weeks: weeks, weekReport: weekReport, reportSheets: reportSheets,
-    templateAoa: templateAoa, dropdownXml: dropdownXml, normField: normField, classify: classify, NONE: NONE, sample: sample, fromSaved: fromSaved
+    templateAoa: templateAoa, dropdownXml: dropdownXml, findOwner: findOwner, normField: normField, classify: classify, NONE: NONE, sample: sample, fromSaved: fromSaved
   };
 });

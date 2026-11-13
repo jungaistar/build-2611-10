@@ -89,12 +89,33 @@ srv.listen(0, async function () {
     var td = pg.waitForEvent('download'); await pg.click('[data-act=tpl]'); var tf = await td, tp = path.join(tmp, 'tpl.xlsx'); await tf.saveAs(tp);
     var twb = XLSX.read(fs.readFileSync(tp)), tz = XLSX.CFB.read(fs.readFileSync(tp), { type: 'buffer' }), tix = -1; tz.FullPaths.forEach(function (q, i) { if (/sheet1\.xml$/.test(q)) tix = i; });
     var txml = Buffer.from(tz.FileIndex[tix].content).toString('utf8');
-    ok(XLSX.utils.sheet_to_json(twb.Sheets[twb.SheetNames[0]], { header: 1 })[0].join() === '날짜,주요내용,마감일,세부내용,업무분류' && /<dataValidation type="list"[^>]*sqref="E2:E500"/.test(txml) && txml.indexOf('복리후생 / 총무,사회공헌 / 의전,자산,비상계획,미분류') > 0, '(v2.1) 양식 — 업무분류 열 + 선택 목록(엑셀에서 열림)');
+    ok(XLSX.utils.sheet_to_json(twb.Sheets[twb.SheetNames[0]], { header: 1 })[0].join() === '날짜,주요내용,마감일,세부내용,업무분류,담당자' && /<dataValidation type="list"[^>]*sqref="E2:E500"/.test(txml) && txml.indexOf('복리후생 / 총무,사회공헌 / 의전,자산,비상계획,미분류') > 0, '(v2.1) 양식 — 업무분류 열 + 선택 목록(엑셀에서 열림)');
     var f3 = xlsx(path.join(tmp, '주간업무보고_이하늘.xlsx'), { 's': [['날짜', '주요내용', '마감일', '세부내용', '업무분류'], ['2026-11-12', '건강검진 일정 안내', '2026-11-14', '', '비상계획'], ['2026-11-12', '예비군 훈련 통지', '', '', '']] });
     var fc3 = await Promise.all([pg.waitForEvent('filechooser'), pg.click('#drop')]); await fc3[0].setFiles([f3]); await pg.waitForSelector('#up-prev');
     ok(await pg.inputValue(fsel(0, 0)) === '비상계획' && /엑셀 값/.test(await pg.textContent('#up-prev tr:nth-child(2)')) && await pg.inputValue(fsel(0, 1)) === '비상계획' && /자동 · /.test(await pg.textContent('#up-prev tr:nth-child(3)')), '(v2.1) 엑셀에 적힌 분류가 우선, 빈 칸은 자동');
+    // v2.2 담당자 — 엑셀 값 우선 · 글에서 찾기 · 파일 담당자 · 미리보기에서 고치기
+    var osel = function (i, j) { return '#up-prev input[data-k="own"][data-i="' + i + '"][data-j="' + j + '"]'; };
+    ok(await pg.inputValue(osel(0, 0)) === '' && /파일 담당자 이하늘/.test(await pg.textContent('#up-prev tr:nth-child(2)')), '(v2.2) 담당자 칸이 비면 파일 이름의 담당자');
     await pg.click('[data-act=up-reset]');
-
+    var f4 = xlsx(path.join(tmp, 'weekly_all.xlsx'), { 's': [['날짜', '주요내용', '마감일', '세부내용', '업무분류', '담당자'], ['2026-11-12', '식당 위생 점검', '', '', '', '박서준'], ['2026-11-12', '김민수 대리와 임대 계약 검토', '', '', '', ''], ['2026-11-12', '소방 훈련 준비', '', '담당: 최영희 과장', '', ''], ['2026-11-12', '사무용품 정리', '', '', '', '']] });
+    var fc4 = await Promise.all([pg.waitForEvent('filechooser'), pg.click('#drop')]); await fc4[0].setFiles([f4]); await pg.waitForSelector('#up-prev');
+    ok(await pg.inputValue(osel(0, 0)) === '박서준' && /엑셀 값/.test(await pg.textContent('#up-prev tr:nth-child(2) td:nth-child(2)')), '(v2.2) 엑셀에 적힌 담당자가 우선');
+    ok(await pg.inputValue(osel(0, 1)) === '김민수' && /자동 · 등록된 담당자 이름/.test(await pg.textContent('#up-prev tr:nth-child(3)')), '(v2.2) 등록된 담당자 이름이 글에 나오면 자동');
+    ok(await pg.inputValue(osel(0, 2)) === '최영희' && /자동 · 「담당: 최영희 과장」/.test(await pg.textContent('#up-prev tr:nth-child(4)')), '(v2.2) 「담당: 이름」으로 적힌 이름');
+    ok(await pg.inputValue(osel(0, 3)) === '' && /미지정/.test(await pg.textContent('#up-prev tr:nth-child(5) td:nth-child(2)')) && await pg.isDisabled('[data-act=up-commit]'), '(v2.2) 확인할 수 없으면 빈칸 — 이름을 지어내지 않고 등록을 막는다');
+    await pg.fill(osel(0, 3), '이하늘'); await pg.dispatchEvent(osel(0, 3), 'change');
+    ok(/직접 고름/.test(await pg.textContent('#up-prev tr:nth-child(5) td:nth-child(2)')) && await pg.isEnabled('[data-act=up-commit]'), '(v2.2) 미리보기에서 담당자를 직접 고르면 등록할 수 있다');
+    await pg.click('[data-act=up-commit]'); await pg.waitForSelector('#up-done');
+    var ow = await pg.evaluate(function () { return window.__app.db().tasks.filter(function (x) { return x.source_file === 'weekly_all.xlsx'; }).map(function (x) { return x.owner + '/' + x.field; }).join(); });
+    ok(ow === '박서준/복리후생 / 총무,김민수/자산,최영희/비상계획,이하늘/복리후생 / 총무', '(v2.2) 등록 — 확정한 담당자 · 업무분류가 그대로 저장', ow);
+    await nav('upload'); if (await pg.$('[data-act=up-reset]')) await pg.click('[data-act=up-reset]');
+    var td2 = pg.waitForEvent('download'); await pg.click('[data-act=tpl]'); var tf2 = await td2, tp2 = path.join(tmp, 'tpl2.xlsx'); await tf2.saveAs(tp2);
+    var tz2 = XLSX.CFB.read(fs.readFileSync(tp2), { type: 'buffer' }), tix2 = -1; tz2.FullPaths.forEach(function (q, i) { if (/sheet1\.xml$/.test(q)) tix2 = i; });
+    var txml2 = Buffer.from(tz2.FileIndex[tix2].content).toString('utf8'), th2 = XLSX.utils.sheet_to_json(XLSX.read(fs.readFileSync(tp2)).Sheets['주간업무'], { header: 1 })[0].join();
+    ok(th2 === '날짜,주요내용,마감일,세부내용,업무분류,담당자' && /sqref="F2:F500"/.test(txml2) && /김민수/.test(txml2) && /이하늘/.test(txml2), '(v2.2) 양식 — 담당자 열 + 등록된 담당자 선택 목록', th2);
+    // 뒤의 시험(건수)에 영향을 주지 않게 방금 등록한 4건과 그 업로드 기록을 지운다
+    await pg.evaluate(function () { var d = window.__app.db(); d.tasks = d.tasks.filter(function (x) { return x.source_file !== 'weekly_all.xlsx'; }); d.logs = d.logs.filter(function (l) { return l.owner !== 'weekly_all.xlsx'; }); window.__app.save(); });
+    await pg.reload(); await pg.waitForSelector('#view');
     // 보고서 및 이력
     await nav('hist');
     ok(/전체 11건/.test((await pg.textContent('#h-report')).replace(/\s+/g, ' ').replace('전체 11 건', '전체 11건')) || /전체\s*11/.test(await pg.textContent('#h-report')), '주차별 보고서(금주 11건)');
