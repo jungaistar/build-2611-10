@@ -69,7 +69,24 @@ eq(W.weeks(W.sample(T)), ['2026-11-16', '2026-11-09'], '주차 목록(최근 먼
 var saved = W.fromSaved(JSON.stringify({ tasks: [{ id: 'a', title: 'x', owner: 'k' }] }));
 ok(saved.tasks[0].title === 'x' && saved.tasks[0].needs_decision === false && saved.tasks[0].field === '' && saved.logs.length === 0, '저장본 읽기 — 빠진 칸은 기본값');
 eq([W.fromSaved('{bad'), W.fromSaved('{"rows":[]}'), W.fromSaved(null)], [null, null, null], '모르는 저장본은 읽지 않는다');
-eq(W.templateAoa()[0], ['날짜', '주요내용', '마감일', '세부내용'], '양식의 머리글 4개');
+eq(W.templateAoa()[0], ['날짜', '주요내용', '마감일', '세부내용', '업무분류'], '양식의 머리글 5개(v2.1 업무분류)');
+
+/* v2.1 업무분류 */
+eq(['업무분류', '업무 분야', '분류', 'Category'].map(W.headKey), ['field', 'field', 'field', 'field'], '업무분류 머리글');
+eq([W.normField('복리후생/총무'), W.normField(' 사회공헌 / 의전 '), W.normField('자산'), W.normField('비상계획'), W.normField('미분류'), W.normField(''), W.normField('기타')], ['복리후생 / 총무', '사회공헌 / 의전', '자산', '비상계획', '미분류', '', ''], '업무분류 글자 맞추기(공백 · 빗금 무관), 모르는 값은 빈 값');
+eq([['임직원 건강검진 업체 선정', '견적 비교'], ['지역 아동센터 봉사활동', '기부 물품 전달'], ['유휴 자산 매각 검토', '토지 감정'], ['을지연습 준비', '민방위 훈련 계획'], ['주간 회의', '자료 준비']].map(function (t) { return W.classify(t[0], t[1]).field; }),
+  ['복리후생 / 총무', '사회공헌 / 의전', '자산', '비상계획', ''], '낱말로 자동 분류 — 맞는 낱말이 없으면 미분류');
+eq([W.classify('봉사', '자산').field, W.classify('봉사', '자산').why], ['사회공헌 / 의전', ['봉사']], '제목의 낱말을 세부내용보다 무겁게 본다');
+eq(W.classify('봉사 자산', '').field, '', '두 분류가 같은 점수면 미분류(사람이 고른다)');
+ok(W.classify('건강검진', '').why.indexOf('건강검진') >= 0, '어떤 낱말로 분류했는지 남긴다');
+var fa = [['날짜', '주요내용', '마감일', '세부내용', '업무분류'], ['2026-11-09', '건강검진 업체 선정', '', '', '자산'], ['2026-11-09', '건강검진 업체 선정', '', '', ''], ['2026-11-09', '주간 회의', '', '', '미분류'], ['2026-11-09', '예비군 훈련 통지', '', '', '기타']];
+var fx = W.extractSheet(fa, W.inspectSheet(fa), 2026);
+eq(fx.map(function (r) { return [r.field, r.field_src]; }), [['자산', 'file'], ['복리후생 / 총무', 'auto'], ['', 'file'], ['비상계획', 'auto']], '엑셀에 적힌 분류가 우선, 비었으면 자동, 미분류라고 적으면 미분류');
+ok(fx[3].flags.some(function (x) { return /목록에 없어/.test(x); }) && fx[0].flags.length === 0, '목록에 없는 분류는 알리고 자동으로 돌린다');
+eq(W.inspectSheet([['날짜', '주요내용']]).missing, ['due_date', 'detail'], '업무분류 열은 없어도 「없는 열」로 세지 않는다');
+var ft = W.rowsToTasks([{ title: '가', field: '자산', owner: 'x' }, { title: '나', field: '미분류' }, { title: '다', field: '' }, { title: '라', field: '엉뚱' }]);
+eq(ft.map(function (t) { return t.field; }), ['자산', '', '', ''], '등록 — 미리보기의 분류를 저장, 미분류 · 모르는 값은 빈 값');
+ok(/type="list"/.test(W.dropdownXml('E')) && /sqref="E2:E500"/.test(W.dropdownXml('E')) && W.dropdownXml('E').indexOf('"복리후생 / 총무,사회공헌 / 의전,자산,비상계획,미분류"') > 0, '양식의 선택 목록 — 5개 항목');
 
 console.log('규칙 테스트: 통과 ' + passed + ' · 실패 ' + failed);
 process.exit(failed ? 1 : 0);

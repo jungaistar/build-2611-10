@@ -90,3 +90,6 @@ tr.skip td{opacity:.5;} tr.flag td{background:#fffaf0;} .bad{color:var(--red);fo
   aside,.noprint,#toast{display:none !important;} #app{display:block;height:auto;} main{padding:0;} #view{overflow:visible;display:block;}
   body{background:#fff;} .card{border:0;padding:0;} th{background:#fff;} .wrap{overflow:visible;}
 }
+
+/* v2.1 업무분류 */
+#up-prev select{min-width:128px;} #up-prev small.auto{display:block;font-size:11px;color:#6b7a99;margin-top:3px;max-width:150px;white-space:normal;}

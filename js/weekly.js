@@ -51,15 +51,44 @@
     ['work_date', /^(날짜|일자|업무일|업무일자|작성일|date)$/],
     ['title', /^(주요내용|주요업무|업무내용|업무명|업무제목|제목|내용|title)$/],
     ['due_date', /^(마감일|마감|기한|완료예정일|완료예정|예정일|납기|duedate|due)$/],
-    ['detail', /^(세부내용|세부사항|상세내용|상세|비고|detail|details)$/]
+    ['detail', /^(세부내용|세부사항|상세내용|상세|비고|detail|details)$/],
+    ['field', /^(업무분류|업무분야|분류|분야|category)$/]
   ];
+  /* ───────────── 업무분류(v2.1) ─────────────
+   * 엑셀에 적혀 있으면 그 값을 쓰고, 비어 있으면 제목 · 세부내용의 낱말로 자동 분류한다.
+   * 자동 분류는 낱말 규칙이다(외부 AI 를 부르지 않는다). 맞는 낱말이 없거나 두 분류가 같은 점수면 미분류로 두고 사람이 고른다. */
+  var NONE = '미분류';
+  var FIELD_WORDS = [
+    ['복리후생 / 총무', ['복리후생', '복지', '건강검진', '검진', '구내식당', '식당', '급식', '식수', '통근', '셔틀', '기숙사', '사택', '숙소', '동호회', '경조', '명절', '선물', '휴양', '콘도', '근무복', '유니폼', '사무용품', '비품', '소모품', '청소', '미화', '우편', '택배', '총무', '주차', '법인차', '업무용 차량', '간식', '포상', '체육대회', '워크숍', '사내 행사', '휴게', '자판기', '정수기', '명함', '인쇄']],
+    ['사회공헌 / 의전', ['사회공헌', '봉사', '기부', '후원', '나눔', '지역사회', '상생', '장학', '김장', '연탄', '헌혈', '의전', '내방', '방문객', '귀빈', 'vip', '영접', '환영', '대외', '지자체', '시청', '구청', '협약', 'mou', '간담회', '기념식', '준공식', '시상식', '초청']],
+    ['자산', ['자산', '부동산', '임대', '임차', '토지', '건물', '매각', '매입', '취득', '감가', '재물', '실사', '등기', '재산세', '보험', '고정자산', '유휴', '불용', '처분', '이전 설치', '리모델링', '보수 공사', '시설 공사', '시설물', '창고']],
+    ['비상계획', ['비상', '예비군', '민방위', '을지', '충무', '통합방위', '방호', '경비', '보안', '소방', '화재', '대피', '재난', '재해', '안보', '비상연락', '비상 연락', '출입 통제', 'cctv', '상황실', '훈련', '점검표']]
+  ];
+  /** 글자 → 업무분류. FIELDS 중 하나, '미분류'(사용자가 미분류로 적음), ''(비었거나 모르는 값) */
+  function normField(v) {
+    var k = norm(v); if (!k) return '';
+    for (var i = 0; i < FIELDS.length; i++) if (norm(FIELDS[i]) === k) return FIELDS[i];
+    return k === norm(NONE) ? NONE : '';
+  }
+  /** 제목 · 세부내용 → { field, why:[맞은 낱말], scores }. field 가 '' 이면 미분류 */
+  function classify(title, detail) {
+    var text = (txt(title) + ' ' + txt(title) + ' ' + txt(detail)).toLowerCase(), best = null, second = 0, scores = {};
+    FIELD_WORDS.forEach(function (fw) {
+      var hit = [], n = 0;
+      fw[1].forEach(function (w) { var c = text.split(w).length - 1; if (c) { hit.push(w); n += c; } });
+      scores[fw[0]] = n;
+      if (n && (!best || n > best.n)) { second = best ? best.n : second; best = { field: fw[0], n: n, why: hit }; } else if (n > second) second = n;
+    });
+    if (!best || best.n === second) return { field: '', why: best ? ['여러 분류에 걸림'] : [], scores: scores };
+    return { field: best.field, why: best.why, scores: scores };
+  }
   function headKey(v) { var k = norm(v); if (!k) return ''; for (var i = 0; i < HEAD.length; i++) if (HEAD[i][1].test(k)) return HEAD[i][0]; return ''; }
   /** 머리줄 찾기 — 「주요내용」이 있고 4개 중 2개 이상이 한 줄에 있는 첫 줄(위 20줄 안). 열 순서는 상관없다 */
   function inspectSheet(aoa) {
     for (var r = 0; r < Math.min((aoa || []).length, 20); r++) {
       var map = {}, row = aoa[r] || [];
       row.forEach(function (v, c) { var k = headKey(v); if (k && map[k] == null) map[k] = c; });
-      if (map.title != null && Object.keys(map).length >= 2) return { ok: true, headerRow: r, map: map, missing: HEAD.map(function (h) { return h[0]; }).filter(function (k) { return map[k] == null; }) };
+      if (map.title != null && Object.keys(map).length >= 2) return { ok: true, headerRow: r, map: map, missing: HEAD.map(function (h) { return h[0]; }).filter(function (k) { return k !== 'field' && map[k] == null; }) };   // 업무분류 열은 없어도 된다(자동 분류)
     }
     return { ok: false, error: '「주요내용」 머리글이 있는 줄을 찾지 못했습니다' };
   }
@@ -77,6 +106,10 @@
       if (txt(rawW).trim() !== '' && !o.work_date) { o.flags.push('날짜를 읽지 못했습니다(원문: ' + txt(rawW).trim() + ')'); o.work_raw = txt(rawW).trim(); }
       if (txt(rawD).trim() !== '' && !o.due_date) { o.flags.push('마감일을 읽지 못했습니다(원문: ' + txt(rawD).trim() + ')'); o.due_raw = txt(rawD).trim(); }
       if (o.title === '') o.flags.push('주요내용이 비어 있습니다');
+      // 업무분류 — 적혀 있으면 그대로, 비었으면 자동. 모르는 값이 적혀 있으면 알리고 자동으로 돌린다
+      var rawF = txt(cell(row, 'field')).trim(), nf = normField(rawF);
+      if (nf) { o.field = nf === NONE ? '' : nf; o.field_src = 'file'; }
+      else { var c = classify(o.title, o.detail); o.field = c.field; o.field_src = 'auto'; o.field_why = c.why; if (rawF) o.flags.push('업무분류 「' + rawF + '」는 목록에 없어 자동 분류했습니다'); }
       out.push(o);
     }
     return out;
@@ -146,10 +179,10 @@
     });
     return rows;
   }
-  /** 미리보기 행 → 업무. 엑셀에 없는 분야 · 상태 · 의사결정은 비워 둔다(미분류) */
+  /** 미리보기 행 → 업무. 업무분류는 미리보기에서 정한 값(v2.1), 상태 · 의사결정은 비워 둔다 */
   function rowsToTasks(rows) {
     return rows.filter(function (r) { return !r.skip && norm(r.title); }).map(function (r) {
-      return blankTask({ owner: txt(r.owner).trim(), work_date: r.work_date || '', due_date: r.due_date || '', title: r.title, detail: r.detail || '', source_file: r.file || '', source_sheet: r.sheet || '' });
+      return blankTask({ owner: txt(r.owner).trim(), work_date: r.work_date || '', due_date: r.due_date || '', title: r.title, detail: r.detail || '', field: normField(r.field) === NONE ? '' : normField(r.field), source_file: r.file || '', source_sheet: r.sheet || '' });
     });
   }
   function placement(r, today) {
@@ -170,7 +203,9 @@
     [['금주', rep.cur], ['차주', rep.next]].forEach(function (p) { p[1].forEach(function (g) { g.tasks.forEach(function (t) { rows.push([p[0], g.field, t.work_date, t.title, t.due_date, t.owner, eff(t, today), t.needs_decision ? (t.reviewed ? '검토 완료' : '결정 필요: ' + t.decision_request) : '', t.detail]); }); }); });
     return { '주간업무보고': rows };
   }
-  function templateAoa() { return [['날짜', '주요내용', '마감일', '세부내용'], ['2026-11-09', '예) 임직원 건강검진 업체 선정', '2026-11-13', '예) 후보 3개 업체 견적 비교\n최종 업체 선정 필요']]; }
+  function templateAoa() { return [['날짜', '주요내용', '마감일', '세부내용', '업무분류'], ['2026-11-09', '예) 임직원 건강검진 업체 선정', '2026-11-13', '예) 후보 3개 업체 견적 비교\n최종 업체 선정 필요', FIELDS[0]]]; }
+  /** 양식의 업무분류 칸에 넣을 선택 목록(엑셀 데이터 유효성) — 워크시트 XML 에 끼울 조각. col 은 열 글자 */
+  function dropdownXml(col, last) { return '<dataValidations count="1"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="업무분류" error="목록에서 골라 주세요" promptTitle="업무분류" prompt="비워 두면 올릴 때 자동으로 분류합니다" sqref="' + col + '2:' + col + (last || 500) + '"><formula1>"' + FIELDS.concat([NONE]).join(',') + '"</formula1></dataValidation></dataValidations>'; }
 
   /* ───────────── 샘플(가짜) — 실제 등록 데이터와 is_sample 로 구분 ───────────── */
   function sample(today) {
@@ -206,6 +241,6 @@
     parseDate: parseDate, headKey: headKey, inspectSheet: inspectSheet, extractSheet: extractSheet, extractBook: extractBook, ownerFromFile: ownerFromFile,
     blankTask: blankTask, eff: eff, taskWeek: taskWeek, weekTasks: weekTasks, byDue: byDue, counts: counts, owners: owners, filter: filter, dashboard: dashboard,
     markDuplicates: markDuplicates, rowsToTasks: rowsToTasks, placement: placement, weeks: weeks, weekReport: weekReport, reportSheets: reportSheets,
-    templateAoa: templateAoa, sample: sample, fromSaved: fromSaved
+    templateAoa: templateAoa, dropdownXml: dropdownXml, normField: normField, classify: classify, NONE: NONE, sample: sample, fromSaved: fromSaved
   };
 });

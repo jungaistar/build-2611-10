@@ -72,11 +72,28 @@ srv.listen(0, async function () {
     ok(/마감일을 읽지 못했습니다\(원문: 모름\)/.test(await pg.textContent('#up-prev')) && /메모[\s\S]*찾지 못했습니다/.test(await pg.textContent('#up-files')), '읽지 못한 날짜 · 머리글 없는 시트를 알린다');
     ok(/차주/.test(await pg.textContent('#up-prev tr:nth-child(3)')) && /금주/.test(await pg.textContent('#up-prev tr:nth-child(2)')), '날짜로 금주 · 차주 배치');
     ok(await pg.isDisabled('[data-act=up-commit]') && (await pg.evaluate(function () { return window.__app.db().tasks.length; })) === 14, '담당자가 비면 등록 못 함 · 등록 전에는 반영 안 됨');
+    // v2.1 업무분류 — 자동 분류 · 미리보기에서 고치기
+    var fsel = function (i, j) { return '#up-prev select[data-k="field"][data-i="' + i + '"][data-j="' + j + '"]'; };
+    ok(await pg.inputValue(fsel(0, 1)) === '복리후생 / 총무' && await pg.inputValue(fsel(0, 2)) === '' && await pg.inputValue(fsel(1, 0)) === '복리후생 / 총무', '(v2.1) 업무분류 자동 — 복지 · 비품은 복리후생/총무, 맞는 낱말이 없으면 미분류');
+    ok(/자동 · 복지/.test(await pg.textContent('#up-prev tr:nth-child(3)')) && /자동 분류 못 함/.test(await pg.textContent('#up-prev tr:nth-child(4)')), '(v2.1) 어떤 낱말로 분류했는지 표시');
+    ok(await pg.$$eval(fsel(0, 1) + ' option', function (o) { return o.map(function (x) { return x.textContent; }).join('|'); }) === '미분류|복리후생 / 총무|사회공헌 / 의전|자산|비상계획', '(v2.1) 미리보기 선택 목록 5개');
+    await pg.selectOption(fsel(0, 2), '자산');
+    ok(await pg.inputValue(fsel(0, 2)) === '자산' && /직접 고름/.test(await pg.textContent('#up-prev tr:nth-child(4)')), '(v2.1) 미리보기에서 업무분류 직접 고르기');
     await pg.fill('[data-ch=up-owner][data-i="1"]', '박서준'); await pg.dispatchEvent('[data-ch=up-owner][data-i="1"]', 'change');
     await pg.click('[data-act=up-commit]'); await pg.waitForSelector('#up-done');
     ok(/3건을 등록했습니다/.test(await pg.textContent('#up-done')), '최종 등록 3건(중복 1건 제외)');
     var st = await pg.evaluate(function () { var t = window.__app.db().tasks.filter(function (x) { return !x.is_sample; }); return [t.length, t.map(function (x) { return x.field + x.status + x.needs_decision; }).join(), t.filter(function (x) { return x.owner === '박서준' && x.source_file === 'weekly.xlsx'; }).length]; });
-    ok(st[0] === 3 && st[1] === 'false,false,false' && st[2] === 1, '분야 · 상태 · 의사결정은 미분류로 등록, 출처 파일 기록', JSON.stringify(st));
+    ok(st[0] === 3 && st[1] === '복리후생 / 총무false,자산false,복리후생 / 총무false' && st[2] === 1, '(v2.1) 업무분류는 미리보기 값으로 등록 · 상태 · 의사결정은 비움, 출처 파일 기록', JSON.stringify(st));
+    // 양식 — 업무분류 열과 선택 목록, 분류를 적어 올리면 그 값이 우선
+    await nav('upload'); if (await pg.$('[data-act=up-reset]')) await pg.click('[data-act=up-reset]');
+    var td = pg.waitForEvent('download'); await pg.click('[data-act=tpl]'); var tf = await td, tp = path.join(tmp, 'tpl.xlsx'); await tf.saveAs(tp);
+    var twb = XLSX.read(fs.readFileSync(tp)), tz = XLSX.CFB.read(fs.readFileSync(tp), { type: 'buffer' }), tix = -1; tz.FullPaths.forEach(function (q, i) { if (/sheet1\.xml$/.test(q)) tix = i; });
+    var txml = Buffer.from(tz.FileIndex[tix].content).toString('utf8');
+    ok(XLSX.utils.sheet_to_json(twb.Sheets[twb.SheetNames[0]], { header: 1 })[0].join() === '날짜,주요내용,마감일,세부내용,업무분류' && /<dataValidation type="list"[^>]*sqref="E2:E500"/.test(txml) && txml.indexOf('복리후생 / 총무,사회공헌 / 의전,자산,비상계획,미분류') > 0, '(v2.1) 양식 — 업무분류 열 + 선택 목록(엑셀에서 열림)');
+    var f3 = xlsx(path.join(tmp, '주간업무보고_이하늘.xlsx'), { 's': [['날짜', '주요내용', '마감일', '세부내용', '업무분류'], ['2026-11-12', '건강검진 일정 안내', '2026-11-14', '', '비상계획'], ['2026-11-12', '예비군 훈련 통지', '', '', '']] });
+    var fc3 = await Promise.all([pg.waitForEvent('filechooser'), pg.click('#drop')]); await fc3[0].setFiles([f3]); await pg.waitForSelector('#up-prev');
+    ok(await pg.inputValue(fsel(0, 0)) === '비상계획' && /엑셀 값/.test(await pg.textContent('#up-prev tr:nth-child(2)')) && await pg.inputValue(fsel(0, 1)) === '비상계획' && /자동 · /.test(await pg.textContent('#up-prev tr:nth-child(3)')), '(v2.1) 엑셀에 적힌 분류가 우선, 빈 칸은 자동');
+    await pg.click('[data-act=up-reset]');
 
     // 보고서 및 이력
     await nav('hist');
